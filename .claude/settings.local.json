@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(grep -qE \"\\(ready in|Local:|error\\)\" \"C:\\\\\\\\Users\\\\\\\\GGPC\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\c--Users-GGPC-Documents-Github-minirail\\\\\\\\9cf414d7-ec59-4514-859a-8c024f3af64e\\\\\\\\tasks\\\\\\\\bamstzfh9.output\")",
+      "Bash(tail -20 \"C:\\\\\\\\Users\\\\\\\\GGPC\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\c--Users-GGPC-Documents-Github-minirail\\\\\\\\9cf414d7-ec59-4514-859a-8c024f3af64e\\\\\\\\tasks\\\\\\\\bamstzfh9.output\")",
+      "Bash(curl -s http://localhost:5176/ -o /tmp/page.html -w \"HTTP %{http_code}\\\\n\")",
+      "Read(//tmp/**)",
+      "Bash(curl -s http://localhost:5176/src/routes/+page.svelte -o /dev/null -w \"page module: HTTP %{http_code}\\\\n\")",
+      "Bash(tail -30 \"C:\\\\\\\\Users\\\\\\\\GGPC\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\c--Users-GGPC-Documents-Github-minirail\\\\\\\\9cf414d7-ec59-4514-859a-8c024f3af64e\\\\\\\\tasks\\\\\\\\bamstzfh9.output\")"
+    ]
+  }
+}

@@ -1,37 +1,61 @@
-import { dx, dy, opposite, type Loco } from './types';
+import { dx, dy, opposite, LOCO_COLORS, type Loco, type Reverser } from './types';
 import { pathsOf } from './pieces';
 import { pathLength } from './geometry';
 import { getPiece } from './grid.svelte';
 
-export type Reverser = -1 | 0 | 1;
+export type { Reverser };
 
 export const sim = $state({
-	loco: null as Loco | null,
-	reverser: 0 as Reverser,
-	throttle: 0 // notches 0..MAX_THROTTLE, interpreted as tiles/sec
+	locos: [] as Loco[]
 });
 
 export const MAX_THROTTLE = 8;
 
 let rafHandle = 0;
 let lastTime = 0;
-// Tracks the loco's current physical motion direction relative to placement,
-// so we know whether to flip loco.dir when the user toggles reverser.
-let lastNonzeroReverser: 1 | -1 = 1;
+let nextLocoId = 1;
+
+function findLoco(id: number): Loco | undefined {
+	return sim.locos.find((l) => l.id === id);
+}
+
+function pickColor(): string {
+	const used = new Set(sim.locos.map((l) => l.color));
+	for (const c of LOCO_COLORS) if (!used.has(c)) return c;
+	return LOCO_COLORS[sim.locos.length % LOCO_COLORS.length];
+}
 
 export function placeLoco(x: number, y: number) {
 	const piece = getPiece(x, y);
 	if (!piece) return;
-	sim.loco = { x, y, pathIdx: 0, t: 0.5, dir: 1, stopped: false };
-	lastNonzeroReverser = 1;
-	sim.reverser = 0;
-	sim.throttle = 0;
+	if (sim.locos.some((l) => l.x === x && l.y === y)) return;
+	sim.locos.push({
+		id: nextLocoId++,
+		color: pickColor(),
+		x,
+		y,
+		pathIdx: 0,
+		t: 0.5,
+		dir: 1,
+		stopped: false,
+		reverser: 0,
+		throttle: 0,
+		lastNonzeroReverser: 1
+	});
 }
 
-export function clearLoco() {
-	sim.loco = null;
-	sim.reverser = 0;
-	sim.throttle = 0;
+export function removeLoco(id: number) {
+	const idx = sim.locos.findIndex((l) => l.id === id);
+	if (idx >= 0) sim.locos.splice(idx, 1);
+	if (!anyMoving() && rafHandle) {
+		cancelAnimationFrame(rafHandle);
+		rafHandle = 0;
+	}
+}
+
+export function clearAllLocos() {
+	sim.locos.length = 0;
+	nextLocoId = 1;
 	if (rafHandle) cancelAnimationFrame(rafHandle);
 	rafHandle = 0;
 }
@@ -89,18 +113,22 @@ function step(loco: Loco, distance: number) {
 	}
 }
 
-function isMoving(): boolean {
-	return !!(sim.loco && !sim.loco.stopped && sim.reverser !== 0 && sim.throttle > 0);
+function locoIsMoving(l: Loco): boolean {
+	return !l.stopped && l.reverser !== 0 && l.throttle > 0;
+}
+
+function anyMoving(): boolean {
+	return sim.locos.some(locoIsMoving);
 }
 
 function loop() {
 	const now = performance.now();
 	const dt = Math.min((now - lastTime) / 1000, 0.1);
 	lastTime = now;
-	if (isMoving()) {
-		step(sim.loco!, sim.throttle * dt);
+	for (const l of sim.locos) {
+		if (locoIsMoving(l)) step(l, l.throttle * dt);
 	}
-	if (isMoving()) {
+	if (anyMoving()) {
 		rafHandle = requestAnimationFrame(loop);
 	} else {
 		rafHandle = 0;
@@ -108,25 +136,29 @@ function loop() {
 }
 
 function startLoopIfNeeded() {
-	if (rafHandle !== 0 || !isMoving()) return;
+	if (rafHandle !== 0 || !anyMoving()) return;
 	lastTime = performance.now();
 	rafHandle = requestAnimationFrame(loop);
 }
 
-export function setReverser(r: Reverser) {
-	if (r === sim.reverser) return;
-	if (sim.loco && r !== 0 && r !== lastNonzeroReverser) {
-		sim.loco.dir = (-sim.loco.dir) as 1 | -1;
-		lastNonzeroReverser = r;
+export function setReverser(id: number, r: Reverser) {
+	const loco = findLoco(id);
+	if (!loco) return;
+	if (r === loco.reverser) return;
+	if (r !== 0 && r !== loco.lastNonzeroReverser) {
+		loco.dir = (-loco.dir) as 1 | -1;
+		loco.lastNonzeroReverser = r;
 	}
-	if (sim.loco?.stopped && r !== 0) sim.loco.stopped = false;
-	sim.reverser = r;
+	if (loco.stopped && r !== 0) loco.stopped = false;
+	loco.reverser = r;
 	startLoopIfNeeded();
 }
 
-export function setThrottle(t: number) {
+export function setThrottle(id: number, t: number) {
+	const loco = findLoco(id);
+	if (!loco) return;
 	const clamped = Math.max(0, Math.min(MAX_THROTTLE, t));
-	sim.throttle = clamped;
-	if (sim.loco?.stopped && clamped > 0 && sim.reverser !== 0) sim.loco.stopped = false;
+	loco.throttle = clamped;
+	if (loco.stopped && clamped > 0 && loco.reverser !== 0) loco.stopped = false;
 	startLoopIfNeeded();
 }

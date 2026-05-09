@@ -19,20 +19,35 @@
 		return { x, y, piece };
 	}));
 
-	const locoPose = $derived.by(() => {
-		const l = sim.loco;
-		if (!l) return null;
-		const piece = getPiece(l.x, l.y);
-		if (!piece) return null;
-		const paths = pathsOf(piece);
-		const path = paths[l.pathIdx];
-		if (!path) return null;
-		const s = sample(path, l.t);
-		const x = (l.x + s.x) * TILE;
-		const y = (l.y + s.y) * TILE;
-		const headingDeg = (s.heading * 180) / Math.PI + (l.dir === -1 ? 180 : 0);
-		return { x, y, heading: headingDeg };
+	const locoPoses = $derived.by(() => {
+		const out: { id: number; color: string; x: number; y: number; heading: number }[] = [];
+		for (const l of sim.locos) {
+			const piece = getPiece(l.x, l.y);
+			if (!piece) continue;
+			const paths = pathsOf(piece);
+			const path = paths[l.pathIdx];
+			if (!path) continue;
+			const s = sample(path, l.t);
+			out.push({
+				id: l.id,
+				color: l.color,
+				x: (l.x + s.x) * TILE,
+				y: (l.y + s.y) * TILE,
+				heading: (s.heading * 180) / Math.PI + (l.dir === -1 ? 180 : 0)
+			});
+		}
+		return out;
 	});
+
+	function darken(hex: string): string {
+		const m = /^#([0-9a-f]{6})$/i.exec(hex);
+		if (!m) return hex;
+		const n = parseInt(m[1], 16);
+		const r = Math.max(0, ((n >> 16) & 0xff) - 60);
+		const g = Math.max(0, ((n >> 8) & 0xff) - 60);
+		const b = Math.max(0, (n & 0xff) - 60);
+		return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+	}
 
 	function handleClick(e: MouseEvent) {
 		const svg = e.currentTarget as SVGSVGElement;
@@ -122,10 +137,19 @@
 		</g>
 	{/each}
 
-	{#if locoPose}
-		<g transform="translate({locoPose.x} {locoPose.y}) rotate({locoPose.heading})">
-			<rect x="-12" y="-7" width="24" height="14" rx="3" fill="#dc2626" stroke="#7f1d1d" stroke-width="1" />
+	{#each locoPoses as pose (pose.id)}
+		<g transform="translate({pose.x} {pose.y}) rotate({pose.heading})">
+			<rect
+				x="-12"
+				y="-7"
+				width="24"
+				height="14"
+				rx="3"
+				fill={pose.color}
+				stroke={darken(pose.color)}
+				stroke-width="1"
+			/>
 			<rect x="6" y="-4" width="6" height="8" fill="#fbbf24" />
 		</g>
-	{/if}
+	{/each}
 </svg>

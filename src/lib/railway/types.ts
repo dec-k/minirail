@@ -18,13 +18,31 @@ export type Piece = { kind: PieceKind; rotation: Rotation; active?: 0 | 1 };
 
 export const isSwitch = (kind: PieceKind) => kind === 'switch-left' || kind === 'switch-right';
 
+export type Reverser = -1 | 0 | 1;
+
+export const LOCO_COLORS = [
+	'#dc2626',
+	'#2563eb',
+	'#059669',
+	'#d97706',
+	'#7c3aed',
+	'#0891b2',
+	'#db2777',
+	'#65a30d'
+];
+
 export type Loco = {
+	id: number;
+	color: string;
 	x: number;
 	y: number;
 	pathIdx: number;
 	t: number;
 	dir: 1 | -1;
 	stopped: boolean;
+	reverser: Reverser;
+	throttle: number;
+	lastNonzeroReverser: 1 | -1;
 };
 
 export const cellKey = (x: number, y: number) => `${x},${y}`;

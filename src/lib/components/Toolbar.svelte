@@ -10,6 +10,8 @@
 	const tools: { id: Tool; label: string }[] = [
 		{ id: 'straight', label: 'Straight' },
 		{ id: 'curve', label: 'Curve' },
+		{ id: 'switch-left', label: 'Switch L' },
+		{ id: 'switch-right', label: 'Switch R' },
 		{ id: 'loco', label: 'Locomotive' },
 		{ id: 'erase', label: 'Erase' }
 	];

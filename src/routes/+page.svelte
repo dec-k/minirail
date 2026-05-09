@@ -10,8 +10,9 @@
 	<div class="mx-auto flex max-w-fit flex-col gap-3">
 		<h1 class="text-xl font-semibold text-slate-900">Mini Rail</h1>
 		<p class="text-sm text-slate-600">
-			Click cells to place track. Click a piece of the same kind again to rotate it. Place a
-			locomotive on any track tile, then press Play.
+			Click cells to place track. Click a piece of the same kind again to rotate it.
+			<span class="font-medium">Shift+click</span> a switch to throw it. Place a locomotive on any
+			track tile, then press Play.
 		</p>
 		<Toolbar bind:tool />
 		<Board {tool} />

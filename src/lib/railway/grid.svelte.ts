@@ -1,6 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { cellKey, type Piece, type PieceKind, type Rotation } from './types';
-import { newPiece, rotatePiece } from './pieces';
+import { newPiece, rotatePiece, toggleSwitch } from './pieces';
 
 export const grid = $state({
 	width: 20,
@@ -19,6 +19,11 @@ export function placePiece(x: number, y: number, kind: PieceKind, rotation: Rota
 export function rotateAt(x: number, y: number) {
 	const p = grid.cells.get(cellKey(x, y));
 	if (p) grid.cells.set(cellKey(x, y), rotatePiece(p));
+}
+
+export function toggleAt(x: number, y: number) {
+	const p = grid.cells.get(cellKey(x, y));
+	if (p) grid.cells.set(cellKey(x, y), toggleSwitch(p));
 }
 
 export function removeAt(x: number, y: number) {

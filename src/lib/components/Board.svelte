@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { grid, getPiece, placePiece, rotateAt, removeAt } from '$lib/railway/grid.svelte';
+	import { grid, getPiece, placePiece, rotateAt, removeAt, toggleAt } from '$lib/railway/grid.svelte';
 	import { sim, placeLoco } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { svgPathD, sample } from '$lib/railway/geometry';
-	import type { PieceKind } from '$lib/railway/types';
+	import { isSwitch, type PieceKind } from '$lib/railway/types';
 
 	type Tool = PieceKind | 'loco' | 'erase';
 
@@ -46,6 +46,11 @@
 		const y = Math.floor(local.y / TILE);
 		if (x < 0 || x >= grid.width || y < 0 || y >= grid.height) return;
 
+		const existing = getPiece(x, y);
+		if (e.shiftKey) {
+			if (existing && isSwitch(existing.kind)) toggleAt(x, y);
+			return;
+		}
 		if (tool === 'erase') {
 			removeAt(x, y);
 			return;
@@ -54,7 +59,6 @@
 			placeLoco(x, y);
 			return;
 		}
-		const existing = getPiece(x, y);
 		if (existing && existing.kind === tool) {
 			rotateAt(x, y);
 		} else {
@@ -88,24 +92,33 @@
 	<rect width={widthPx} height={heightPx} fill="url(#gridPattern)" />
 
 	{#each cellEntries as { x, y, piece } (`${x},${y}`)}
+		{@const switchTile = isSwitch(piece.kind)}
+		{@const activeIdx = piece.active ?? 0}
 		<g transform="translate({x * TILE} {y * TILE})">
 			<rect width={TILE} height={TILE} fill="#1e293b" opacity="0.04" />
-			{#each pathsOf(piece) as path}
+			{#each pathsOf(piece) as path, i}
+				{@const inactive = switchTile && i !== activeIdx}
 				<path
 					d={svgPathD(path, TILE)}
 					fill="none"
-					stroke="#475569"
-					stroke-width="6"
+					stroke={inactive ? '#cbd5e1' : '#475569'}
+					stroke-width={inactive ? 4 : 6}
 					stroke-linecap="round"
+					opacity={inactive ? 0.7 : 1}
 				/>
-				<path
-					d={svgPathD(path, TILE)}
-					fill="none"
-					stroke="#cbd5e1"
-					stroke-width="2"
-					stroke-dasharray="3 3"
-				/>
+				{#if !inactive}
+					<path
+						d={svgPathD(path, TILE)}
+						fill="none"
+						stroke="#cbd5e1"
+						stroke-width="2"
+						stroke-dasharray="3 3"
+					/>
+				{/if}
 			{/each}
+			{#if switchTile}
+				<circle cx={TILE / 2} cy={TILE / 2} r="3" fill="#16a34a" />
+			{/if}
 		</g>
 	{/each}
 

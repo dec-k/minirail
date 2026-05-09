@@ -11,10 +11,12 @@ export const dx: Record<Dir, number> = { 0: 0, 1: 1, 2: 0, 3: -1 };
 export const dy: Record<Dir, number> = { 0: -1, 1: 0, 2: 1, 3: 0 };
 
 export type Rotation = 0 | 1 | 2 | 3;
-export type PieceKind = 'straight' | 'curve';
+export type PieceKind = 'straight' | 'curve' | 'switch-left' | 'switch-right';
 
 export type TilePath = { from: Dir; to: Dir };
-export type Piece = { kind: PieceKind; rotation: Rotation };
+export type Piece = { kind: PieceKind; rotation: Rotation; active?: 0 | 1 };
+
+export const isSwitch = (kind: PieceKind) => kind === 'switch-left' || kind === 'switch-right';
 
 export type Loco = {
 	x: number;

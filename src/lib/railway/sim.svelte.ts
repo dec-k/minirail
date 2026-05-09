@@ -49,33 +49,26 @@ function step(loco: Loco, distance: number) {
 			break;
 		}
 		const nextPaths = pathsOf(nextPiece);
-		let found = -1;
-		let newDir: 1 | -1 = 1;
-		let newT = 0;
+		const candidates: { idx: number; entry: 'from' | 'to' }[] = [];
 		for (let i = 0; i < nextPaths.length; i++) {
-			if (nextPaths[i].from === entryDir) {
-				found = i;
-				newDir = 1;
-				newT = 0;
-				break;
-			}
-			if (nextPaths[i].to === entryDir) {
-				found = i;
-				newDir = -1;
-				newT = 1;
-				break;
-			}
+			if (nextPaths[i].from === entryDir) candidates.push({ idx: i, entry: 'from' });
+			else if (nextPaths[i].to === entryDir) candidates.push({ idx: i, entry: 'to' });
 		}
-		if (found === -1) {
+		if (candidates.length === 0) {
 			loco.stopped = true;
 			loco.t = loco.dir === 1 ? 1 : 0;
 			break;
 		}
+		let chosen = candidates[0];
+		if (candidates.length > 1) {
+			const active = nextPiece.active ?? 0;
+			chosen = candidates.find((c) => c.idx === active) ?? candidates[0];
+		}
 		loco.x = nx;
 		loco.y = ny;
-		loco.pathIdx = found;
-		loco.dir = newDir;
-		loco.t = newT;
+		loco.pathIdx = chosen.idx;
+		loco.dir = chosen.entry === 'from' ? 1 : -1;
+		loco.t = chosen.entry === 'from' ? 0 : 1;
 	}
 }
 

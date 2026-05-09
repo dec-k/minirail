@@ -35,23 +35,38 @@
 		})
 	);
 
-	const locoPoses = $derived.by(() => {
-		const out: { id: number; color: string; x: number; z: number; rotY: number }[] = [];
+	type VehiclePose = {
+		key: string;
+		kind: 'loco' | 'wagon';
+		color: string;
+		x: number;
+		z: number;
+		rotY: number;
+	};
+
+	function poseOf(v: { x: number; y: number; pathIdx: number; t: number; dir: 1 | -1 }) {
+		const piece = getPiece(v.x, v.y);
+		if (!piece) return null;
+		const path = pathsOf(piece)[v.pathIdx];
+		if (!path) return null;
+		const s = sample(path, v.t);
+		const heading2D = s.heading + (v.dir === -1 ? Math.PI : 0);
+		return {
+			x: (v.x + s.x) * TILE,
+			z: (v.y + s.y) * TILE,
+			rotY: -heading2D
+		};
+	}
+
+	const vehiclePoses = $derived.by(() => {
+		const out: VehiclePose[] = [];
 		for (const l of sim.locos) {
-			const piece = getPiece(l.x, l.y);
-			if (!piece) continue;
-			const paths = pathsOf(piece);
-			const path = paths[l.pathIdx];
-			if (!path) continue;
-			const s = sample(path, l.t);
-			const heading2D = s.heading + (l.dir === -1 ? Math.PI : 0);
-			out.push({
-				id: l.id,
-				color: l.color,
-				x: (l.x + s.x) * TILE,
-				z: (l.y + s.y) * TILE,
-				rotY: -heading2D
-			});
+			const lp = poseOf(l);
+			if (lp) out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, ...lp });
+			for (let i = 0; i < l.wagons.length; i++) {
+				const wp = poseOf(l.wagons[i]);
+				if (wp) out.push({ key: `wagon-${l.id}-${i}`, kind: 'wagon', color: l.color, ...wp });
+			}
 		}
 		return out;
 	});
@@ -182,17 +197,24 @@
 			{/if}
 		{/each}
 
-		<!-- Locos -->
-		{#each locoPoses as pose (pose.id)}
+		<!-- Vehicles -->
+		{#each vehiclePoses as pose (pose.key)}
 			<T.Group position={[pose.x, 0.18, pose.z]} rotation={[0, pose.rotY, 0]}>
-				<T.Mesh>
-					<T.BoxGeometry args={[0.6, 0.25, 0.3]} />
-					<T.MeshStandardMaterial color={pose.color} />
-				</T.Mesh>
-				<T.Mesh position={[0.18, 0.05, 0]}>
-					<T.BoxGeometry args={[0.15, 0.15, 0.2]} />
-					<T.MeshStandardMaterial color="#fbbf24" />
-				</T.Mesh>
+				{#if pose.kind === 'loco'}
+					<T.Mesh>
+						<T.BoxGeometry args={[0.6, 0.25, 0.3]} />
+						<T.MeshStandardMaterial color={pose.color} />
+					</T.Mesh>
+					<T.Mesh position={[0.18, 0.05, 0]}>
+						<T.BoxGeometry args={[0.15, 0.15, 0.2]} />
+						<T.MeshStandardMaterial color="#fbbf24" />
+					</T.Mesh>
+				{:else}
+					<T.Mesh>
+						<T.BoxGeometry args={[0.5, 0.22, 0.28]} />
+						<T.MeshStandardMaterial color={pose.color} />
+					</T.Mesh>
+				{/if}
 			</T.Group>
 		{/each}
 	</Canvas>

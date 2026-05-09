@@ -1,4 +1,14 @@
-import { dx, dy, opposite, LOCO_COLORS, type Loco, type Reverser } from './types';
+import {
+	dx,
+	dy,
+	opposite,
+	cellKey,
+	LOCO_COLORS,
+	type Loco,
+	type Reverser,
+	type RoutingDecision,
+	type Vehicle
+} from './types';
 import { pathsOf } from './pieces';
 import { pathLength } from './geometry';
 import { getPiece } from './grid.svelte';
@@ -10,6 +20,7 @@ export const sim = $state({
 });
 
 export const MAX_THROTTLE = 8;
+export const WAGON_LENGTH = 0.6;
 
 let rafHandle = 0;
 let lastTime = 0;
@@ -40,7 +51,9 @@ export function placeLoco(x: number, y: number) {
 		stopped: false,
 		reverser: 0,
 		throttle: 0,
-		lastNonzeroReverser: 1
+		routingCursor: 0,
+		wagons: [],
+		routingTrail: []
 	});
 }
 
@@ -60,33 +73,47 @@ export function clearAllLocos() {
 	rafHandle = 0;
 }
 
-function step(loco: Loco, distance: number) {
+// Walk a vehicle along the track by `distance`, advancing in v.dir * motionSign.
+// motionSign +1 = head-first (forward), -1 = rear-first (reverse).
+//
+// At a switch facing-point, the vehicle scans the shared `trail` from its own
+// `routingCursor`. If a matching (tileKey, entryPort) entry is found, it reuses
+// the recorded pathIdx — keeping the chain consistent with whichever vehicle
+// led through this crossing. If no match is found, the vehicle is acting as
+// leader: it picks based on the switch's current `active` state and appends.
+function step(
+	v: Vehicle,
+	distance: number,
+	motionSign: 1 | -1,
+	trail: RoutingDecision[]
+) {
 	let remaining = distance;
 	let safety = 1000;
-	while (remaining > 1e-9 && !loco.stopped && safety-- > 0) {
-		const piece = getPiece(loco.x, loco.y);
+	while (remaining > 1e-9 && !v.stopped && safety-- > 0) {
+		const piece = getPiece(v.x, v.y);
 		if (!piece) {
-			loco.stopped = true;
+			v.stopped = true;
 			break;
 		}
 		const paths = pathsOf(piece);
-		const path = paths[loco.pathIdx];
+		const path = paths[v.pathIdx];
 		const pl = pathLength(path);
-		const remainingT = loco.dir === 1 ? 1 - loco.t : loco.t;
+		const effDir = (v.dir * motionSign) as 1 | -1;
+		const remainingT = effDir === 1 ? 1 - v.t : v.t;
 		const remainingDist = remainingT * pl;
 		if (remaining <= remainingDist) {
-			loco.t += loco.dir * (remaining / pl);
+			v.t += effDir * (remaining / pl);
 			return;
 		}
 		remaining -= remainingDist;
-		const exitDir = loco.dir === 1 ? path.to : path.from;
-		const nx = loco.x + dx[exitDir];
-		const ny = loco.y + dy[exitDir];
+		const exitDir = effDir === 1 ? path.to : path.from;
+		const nx = v.x + dx[exitDir];
+		const ny = v.y + dy[exitDir];
 		const entryDir = opposite(exitDir);
 		const nextPiece = getPiece(nx, ny);
 		if (!nextPiece) {
-			loco.stopped = true;
-			loco.t = loco.dir === 1 ? 1 : 0;
+			v.stopped = true;
+			v.t = effDir === 1 ? 1 : 0;
 			break;
 		}
 		const nextPaths = pathsOf(nextPiece);
@@ -96,20 +123,51 @@ function step(loco: Loco, distance: number) {
 			else if (nextPaths[i].to === entryDir) candidates.push({ idx: i, entry: 'to' });
 		}
 		if (candidates.length === 0) {
-			loco.stopped = true;
-			loco.t = loco.dir === 1 ? 1 : 0;
+			v.stopped = true;
+			v.t = effDir === 1 ? 1 : 0;
 			break;
 		}
 		let chosen = candidates[0];
 		if (candidates.length > 1) {
-			const active = nextPiece.active ?? 0;
-			chosen = candidates.find((c) => c.idx === active) ?? candidates[0];
+			const tk = cellKey(nx, ny);
+			let matched: { idx: number; entry: 'from' | 'to' } | null = null;
+			for (let k = v.routingCursor; k < trail.length; k++) {
+				const r = trail[k];
+				if (r.tileKey === tk && r.entryPort === entryDir) {
+					const c = candidates.find((cn) => cn.idx === r.pathIdx);
+					if (c) {
+						matched = c;
+						v.routingCursor = k + 1;
+						break;
+					}
+				}
+			}
+			if (matched) {
+				chosen = matched;
+			} else {
+				const active = nextPiece.active ?? 0;
+				chosen = candidates.find((c) => c.idx === active) ?? candidates[0];
+				trail.push({ tileKey: tk, entryPort: entryDir, pathIdx: chosen.idx });
+				v.routingCursor = trail.length;
+			}
 		}
-		loco.x = nx;
-		loco.y = ny;
-		loco.pathIdx = chosen.idx;
-		loco.dir = chosen.entry === 'from' ? 1 : -1;
-		loco.t = chosen.entry === 'from' ? 0 : 1;
+		v.x = nx;
+		v.y = ny;
+		v.pathIdx = chosen.idx;
+		const newEff = (chosen.entry === 'from' ? 1 : -1) as 1 | -1;
+		v.dir = (newEff * motionSign) as 1 | -1;
+		v.t = chosen.entry === 'from' ? 0 : 1;
+	}
+}
+
+function pruneTrail(loco: Loco) {
+	if (loco.routingTrail.length === 0) return;
+	let min = loco.routingCursor;
+	for (const w of loco.wagons) min = Math.min(min, w.routingCursor);
+	if (min > 0) {
+		loco.routingTrail.splice(0, min);
+		loco.routingCursor -= min;
+		for (const w of loco.wagons) w.routingCursor -= min;
 	}
 }
 
@@ -126,7 +184,15 @@ function loop() {
 	const dt = Math.min((now - lastTime) / 1000, 0.1);
 	lastTime = now;
 	for (const l of sim.locos) {
-		if (locoIsMoving(l)) step(l, l.throttle * dt);
+		if (locoIsMoving(l)) {
+			const dist = l.throttle * dt;
+			const sign = l.reverser as 1 | -1;
+			step(l, dist, sign, l.routingTrail);
+			for (const w of l.wagons) {
+				if (!w.stopped) step(w, dist, sign, l.routingTrail);
+			}
+			pruneTrail(l);
+		}
 	}
 	if (anyMoving()) {
 		rafHandle = requestAnimationFrame(loop);
@@ -145,12 +211,11 @@ export function setReverser(id: number, r: Reverser) {
 	const loco = findLoco(id);
 	if (!loco) return;
 	if (r === loco.reverser) return;
-	if (r !== 0 && r !== loco.lastNonzeroReverser) {
-		loco.dir = (-loco.dir) as 1 | -1;
-		loco.lastNonzeroReverser = r;
-	}
-	if (loco.stopped && r !== 0) loco.stopped = false;
 	loco.reverser = r;
+	if (r !== 0) {
+		if (loco.stopped) loco.stopped = false;
+		for (const w of loco.wagons) if (w.stopped) w.stopped = false;
+	}
 	startLoopIfNeeded();
 }
 
@@ -159,6 +224,45 @@ export function setThrottle(id: number, t: number) {
 	if (!loco) return;
 	const clamped = Math.max(0, Math.min(MAX_THROTTLE, t));
 	loco.throttle = clamped;
-	if (loco.stopped && clamped > 0 && loco.reverser !== 0) loco.stopped = false;
+	if (clamped > 0 && loco.reverser !== 0) {
+		if (loco.stopped) loco.stopped = false;
+		for (const w of loco.wagons) if (w.stopped) w.stopped = false;
+	}
 	startLoopIfNeeded();
+}
+
+export function addWagon(id: number) {
+	const loco = findLoco(id);
+	if (!loco) return;
+	const last: Vehicle =
+		loco.wagons.length > 0 ? loco.wagons[loco.wagons.length - 1] : loco;
+	const probe: Vehicle = {
+		x: last.x,
+		y: last.y,
+		pathIdx: last.pathIdx,
+		t: last.t,
+		dir: last.dir,
+		stopped: false,
+		routingCursor: 0
+	};
+	// Probe is exploratory; pass a throwaway trail so its decisions don't
+	// pollute the train's shared trail.
+	step(probe, WAGON_LENGTH, -1, []);
+	if (probe.stopped) return;
+	loco.wagons.push({
+		x: probe.x,
+		y: probe.y,
+		pathIdx: probe.pathIdx,
+		t: probe.t,
+		dir: probe.dir,
+		stopped: false,
+		routingCursor: last.routingCursor
+	});
+}
+
+export function removeWagon(id: number) {
+	const loco = findLoco(id);
+	if (!loco) return;
+	loco.wagons.pop();
+	pruneTrail(loco);
 }

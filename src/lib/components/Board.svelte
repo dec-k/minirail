@@ -19,22 +19,37 @@
 		return { x, y, piece };
 	}));
 
-	const locoPoses = $derived.by(() => {
-		const out: { id: number; color: string; x: number; y: number; heading: number }[] = [];
+	type VehiclePose = {
+		key: string;
+		kind: 'loco' | 'wagon';
+		color: string;
+		x: number;
+		y: number;
+		heading: number;
+	};
+
+	function poseOf(v: { x: number; y: number; pathIdx: number; t: number; dir: 1 | -1 }) {
+		const piece = getPiece(v.x, v.y);
+		if (!piece) return null;
+		const path = pathsOf(piece)[v.pathIdx];
+		if (!path) return null;
+		const s = sample(path, v.t);
+		return {
+			x: (v.x + s.x) * TILE,
+			y: (v.y + s.y) * TILE,
+			heading: (s.heading * 180) / Math.PI + (v.dir === -1 ? 180 : 0)
+		};
+	}
+
+	const vehiclePoses = $derived.by(() => {
+		const out: VehiclePose[] = [];
 		for (const l of sim.locos) {
-			const piece = getPiece(l.x, l.y);
-			if (!piece) continue;
-			const paths = pathsOf(piece);
-			const path = paths[l.pathIdx];
-			if (!path) continue;
-			const s = sample(path, l.t);
-			out.push({
-				id: l.id,
-				color: l.color,
-				x: (l.x + s.x) * TILE,
-				y: (l.y + s.y) * TILE,
-				heading: (s.heading * 180) / Math.PI + (l.dir === -1 ? 180 : 0)
-			});
+			const lp = poseOf(l);
+			if (lp) out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, ...lp });
+			for (let i = 0; i < l.wagons.length; i++) {
+				const wp = poseOf(l.wagons[i]);
+				if (wp) out.push({ key: `wagon-${l.id}-${i}`, kind: 'wagon', color: l.color, ...wp });
+			}
 		}
 		return out;
 	});
@@ -137,19 +152,32 @@
 		</g>
 	{/each}
 
-	{#each locoPoses as pose (pose.id)}
+	{#each vehiclePoses as pose (pose.key)}
 		<g transform="translate({pose.x} {pose.y}) rotate({pose.heading})">
-			<rect
-				x="-12"
-				y="-7"
-				width="24"
-				height="14"
-				rx="3"
-				fill={pose.color}
-				stroke={darken(pose.color)}
-				stroke-width="1"
-			/>
-			<rect x="6" y="-4" width="6" height="8" fill="#fbbf24" />
+			{#if pose.kind === 'loco'}
+				<rect
+					x="-12"
+					y="-7"
+					width="24"
+					height="14"
+					rx="3"
+					fill={pose.color}
+					stroke={darken(pose.color)}
+					stroke-width="1"
+				/>
+				<rect x="6" y="-4" width="6" height="8" fill="#fbbf24" />
+			{:else}
+				<rect
+					x="-10"
+					y="-6"
+					width="20"
+					height="12"
+					rx="2"
+					fill={pose.color}
+					stroke={darken(pose.color)}
+					stroke-width="1"
+				/>
+			{/if}
 		</g>
 	{/each}
 </svg>

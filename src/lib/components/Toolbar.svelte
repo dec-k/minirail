@@ -5,6 +5,8 @@
 		setThrottle,
 		removeLoco,
 		clearAllLocos,
+		addWagon,
+		removeWagon,
 		MAX_THROTTLE
 	} from '$lib/railway/sim.svelte';
 	import { clearAll } from '$lib/railway/grid.svelte';
@@ -107,6 +109,26 @@
 						/>
 						<span class="w-6 text-right tabular-nums text-slate-600">{loco.throttle}</span>
 					</label>
+
+					<div class="flex items-center gap-1.5">
+						<span class="text-slate-700">Wagons</span>
+						<button
+							class="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-800 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+							onclick={() => removeWagon(loco.id)}
+							disabled={loco.wagons.length === 0}
+							aria-label="Remove wagon from Loco {loco.id}"
+						>
+							−
+						</button>
+						<span class="w-5 text-center tabular-nums text-slate-700">{loco.wagons.length}</span>
+						<button
+							class="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-800 hover:bg-slate-100"
+							onclick={() => addWagon(loco.id)}
+							aria-label="Add wagon to Loco {loco.id}"
+						>
+							+
+						</button>
+					</div>
 
 					{#if loco.stopped}
 						<span class="text-rose-600 font-medium">Derailed</span>

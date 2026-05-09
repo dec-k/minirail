@@ -31,18 +31,32 @@ export const LOCO_COLORS = [
 	'#65a30d'
 ];
 
-export type Loco = {
-	id: number;
-	color: string;
+export type RoutingDecision = { tileKey: string; entryPort: Dir; pathIdx: number };
+
+export type Vehicle = {
 	x: number;
 	y: number;
 	pathIdx: number;
 	t: number;
+	// Path-local head-facing direction. Invariant under reverser changes; only
+	// updates at tile-boundary crossings as the path parametrization rotates.
 	dir: 1 | -1;
 	stopped: boolean;
+	// Index into the loco's routingTrail at which this vehicle should resume
+	// scanning for matching facing-point decisions. The vehicle that finds no
+	// match acts as the leader for that crossing and appends a new entry.
+	routingCursor: number;
+};
+
+export type Wagon = Vehicle;
+
+export type Loco = Vehicle & {
+	id: number;
+	color: string;
 	reverser: Reverser;
 	throttle: number;
-	lastNonzeroReverser: 1 | -1;
+	wagons: Wagon[];
+	routingTrail: RoutingDecision[];
 };
 
 export const cellKey = (x: number, y: number) => `${x},${y}`;

@@ -3,20 +3,37 @@ import { pathsOf } from './pieces';
 import { pathLength } from './geometry';
 import { getPiece } from './grid.svelte';
 
+export type Reverser = -1 | 0 | 1;
+
 export const sim = $state({
 	loco: null as Loco | null,
-	running: false,
-	speed: 2 // tiles per second
+	reverser: 0 as Reverser,
+	throttle: 0 // notches 0..MAX_THROTTLE, interpreted as tiles/sec
 });
+
+export const MAX_THROTTLE = 8;
+
+let rafHandle = 0;
+let lastTime = 0;
+// Tracks the loco's current physical motion direction relative to placement,
+// so we know whether to flip loco.dir when the user toggles reverser.
+let lastNonzeroReverser: 1 | -1 = 1;
 
 export function placeLoco(x: number, y: number) {
 	const piece = getPiece(x, y);
 	if (!piece) return;
 	sim.loco = { x, y, pathIdx: 0, t: 0.5, dir: 1, stopped: false };
+	lastNonzeroReverser = 1;
+	sim.reverser = 0;
+	sim.throttle = 0;
 }
 
 export function clearLoco() {
 	sim.loco = null;
+	sim.reverser = 0;
+	sim.throttle = 0;
+	if (rafHandle) cancelAnimationFrame(rafHandle);
+	rafHandle = 0;
 }
 
 function step(loco: Loco, distance: number) {
@@ -72,32 +89,44 @@ function step(loco: Loco, distance: number) {
 	}
 }
 
-let lastTime = 0;
-let rafHandle = 0;
+function isMoving(): boolean {
+	return !!(sim.loco && !sim.loco.stopped && sim.reverser !== 0 && sim.throttle > 0);
+}
 
 function loop() {
 	const now = performance.now();
 	const dt = Math.min((now - lastTime) / 1000, 0.1);
 	lastTime = now;
-	if (sim.loco && !sim.loco.stopped) {
-		step(sim.loco, sim.speed * dt);
+	if (isMoving()) {
+		step(sim.loco!, sim.throttle * dt);
 	}
-	if (sim.running) rafHandle = requestAnimationFrame(loop);
+	if (isMoving()) {
+		rafHandle = requestAnimationFrame(loop);
+	} else {
+		rafHandle = 0;
+	}
 }
 
-export function play() {
-	if (sim.running || !sim.loco) return;
-	sim.loco.stopped = false;
-	sim.running = true;
+function startLoopIfNeeded() {
+	if (rafHandle !== 0 || !isMoving()) return;
 	lastTime = performance.now();
 	rafHandle = requestAnimationFrame(loop);
 }
 
-export function pause() {
-	sim.running = false;
-	if (rafHandle) cancelAnimationFrame(rafHandle);
+export function setReverser(r: Reverser) {
+	if (r === sim.reverser) return;
+	if (sim.loco && r !== 0 && r !== lastNonzeroReverser) {
+		sim.loco.dir = (-sim.loco.dir) as 1 | -1;
+		lastNonzeroReverser = r;
+	}
+	if (sim.loco?.stopped && r !== 0) sim.loco.stopped = false;
+	sim.reverser = r;
+	startLoopIfNeeded();
 }
 
-export function setSpeed(s: number) {
-	sim.speed = s;
+export function setThrottle(t: number) {
+	const clamped = Math.max(0, Math.min(MAX_THROTTLE, t));
+	sim.throttle = clamped;
+	if (sim.loco?.stopped && clamped > 0 && sim.reverser !== 0) sim.loco.stopped = false;
+	startLoopIfNeeded();
 }

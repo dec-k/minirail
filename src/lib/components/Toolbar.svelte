@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { sim, play, pause, setSpeed, clearLoco } from '$lib/railway/sim.svelte';
+	import {
+		sim,
+		setReverser,
+		setThrottle,
+		clearLoco,
+		MAX_THROTTLE,
+		type Reverser
+	} from '$lib/railway/sim.svelte';
 	import { clearAll } from '$lib/railway/grid.svelte';
 	import type { PieceKind } from '$lib/railway/types';
 
@@ -14,6 +21,12 @@
 		{ id: 'switch-right', label: 'Switch R' },
 		{ id: 'loco', label: 'Locomotive' },
 		{ id: 'erase', label: 'Erase' }
+	];
+
+	const reverserOptions: { id: Reverser; label: string }[] = [
+		{ id: -1, label: 'Reverse' },
+		{ id: 0, label: 'Neutral' },
+		{ id: 1, label: 'Forward' }
 	];
 </script>
 
@@ -33,49 +46,49 @@
 
 	<div class="mx-2 h-6 w-px bg-slate-300"></div>
 
-	<button
-		class="rounded px-3 py-1.5 border bg-emerald-600 text-white border-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-		disabled={sim.running || !sim.loco}
-		onclick={play}
-	>
-		Play
-	</button>
-	<button
-		class="rounded px-3 py-1.5 border bg-amber-600 text-white border-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
-		disabled={!sim.running}
-		onclick={pause}
-	>
-		Pause
-	</button>
+	<div class="flex items-center gap-2">
+		<span class="text-slate-700">Reverser</span>
+		<div class="flex overflow-hidden rounded border border-slate-300">
+			{#each reverserOptions as r}
+				<button
+					class="px-3 py-1.5 border-r border-slate-300 last:border-r-0 {sim.reverser === r.id
+						? 'bg-slate-800 text-white'
+						: 'bg-white text-slate-800 hover:bg-slate-100'} disabled:opacity-50 disabled:cursor-not-allowed"
+					disabled={!sim.loco}
+					onclick={() => setReverser(r.id)}
+				>
+					{r.label}
+				</button>
+			{/each}
+		</div>
+	</div>
 
 	<label class="ml-2 flex items-center gap-2">
-		<span class="text-slate-700">Speed</span>
+		<span class="text-slate-700">Throttle</span>
 		<input
 			type="range"
-			min="0.5"
-			max="8"
-			step="0.5"
-			value={sim.speed}
-			oninput={(e) => setSpeed(+(e.currentTarget as HTMLInputElement).value)}
+			min="0"
+			max={MAX_THROTTLE}
+			step="1"
+			value={sim.throttle}
+			disabled={!sim.loco}
+			oninput={(e) => setThrottle(+(e.currentTarget as HTMLInputElement).value)}
+			class="disabled:opacity-50 disabled:cursor-not-allowed"
 		/>
-		<span class="w-8 text-right tabular-nums text-slate-600">{sim.speed.toFixed(1)}</span>
+		<span class="w-6 text-right tabular-nums text-slate-600">{sim.throttle}</span>
 	</label>
 
 	<div class="mx-2 h-6 w-px bg-slate-300"></div>
 
 	<button
 		class="rounded px-3 py-1.5 border bg-white text-slate-800 border-slate-300 hover:bg-slate-100"
-		onclick={() => {
-			pause();
-			clearLoco();
-		}}
+		onclick={() => clearLoco()}
 	>
 		Remove Loco
 	</button>
 	<button
 		class="rounded px-3 py-1.5 border bg-white text-rose-700 border-rose-300 hover:bg-rose-50"
 		onclick={() => {
-			pause();
 			clearLoco();
 			clearAll();
 		}}

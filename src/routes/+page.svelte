@@ -33,8 +33,8 @@
 		</div>
 		<p class="text-sm text-slate-600">
 			Click cells to place track. Click a piece of the same kind again to rotate it.
-			<span class="font-medium">Shift+click</span> a switch to throw it. Place a locomotive on any
-			track tile, then press Play.
+			<span class="font-medium">Shift+click</span> a switch to throw it. Place a locomotive,
+			engage the reverser (Forward or Reverse), then advance the throttle to apply power.
 		</p>
 		<Toolbar bind:tool />
 		{#if view === '2d'}

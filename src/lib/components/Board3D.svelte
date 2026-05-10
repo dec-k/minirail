@@ -14,7 +14,7 @@
 	import { sample, isStraight } from '$lib/railway/geometry';
 	import { isSwitch, cellKey, type PieceKind, type TilePath } from '$lib/railway/types';
 
-	type Tool = PieceKind | 'loco' | 'erase';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw';
 	let { tool }: { tool: Tool } = $props();
 
 	const TILE = 1;
@@ -132,6 +132,7 @@
 			if (existing && isSwitch(existing.kind)) toggleAt(x, y);
 			return;
 		}
+		if (tool === 'draw') return; // draw tool only works in 2D for now
 		if (tool === 'erase') {
 			removeAt(x, y);
 			return;

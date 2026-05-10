@@ -12,11 +12,12 @@
 	import { clearAll } from '$lib/railway/grid.svelte';
 	import type { PieceKind, Reverser } from '$lib/railway/types';
 
-	type Tool = PieceKind | 'loco' | 'erase';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw';
 
 	let { tool = $bindable() }: { tool: Tool } = $props();
 
 	const tools: { id: Tool; label: string }[] = [
+		{ id: 'draw', label: 'Draw' },
 		{ id: 'straight', label: 'Straight' },
 		{ id: 'curve', label: 'Curve' },
 		{ id: 'switch-left', label: 'Switch L' },
@@ -37,9 +38,9 @@
 		<div class="flex gap-1">
 			{#each tools as t}
 				<button
-					class="rounded px-3 py-1.5 border {tool === t.id
-						? 'bg-slate-800 text-white border-slate-800'
-						: 'bg-white text-slate-800 border-slate-300 hover:bg-slate-100'}"
+					class="rounded border px-3 py-1.5 {tool === t.id
+						? 'border-slate-800 bg-slate-800 text-white'
+						: 'border-slate-300 bg-white text-slate-800 hover:bg-slate-100'}"
 					onclick={() => (tool = t.id)}
 				>
 					{t.label}
@@ -50,7 +51,7 @@
 		<div class="mx-2 h-6 w-px bg-slate-300"></div>
 
 		<button
-			class="rounded px-3 py-1.5 border bg-white text-rose-700 border-rose-300 hover:bg-rose-50"
+			class="rounded border border-rose-300 bg-white px-3 py-1.5 text-rose-700 hover:bg-rose-50"
 			onclick={() => {
 				clearAllLocos();
 				clearAll();
@@ -84,8 +85,7 @@
 						<div class="flex overflow-hidden rounded border border-slate-300">
 							{#each reverserOptions as r}
 								<button
-									class="px-3 py-1 border-r border-slate-300 last:border-r-0 {loco.reverser ===
-									r.id
+									class="border-r border-slate-300 px-3 py-1 last:border-r-0 {loco.reverser === r.id
 										? 'bg-slate-800 text-white'
 										: 'bg-white text-slate-800 hover:bg-slate-100'}"
 									onclick={() => setReverser(loco.id, r.id)}
@@ -104,23 +104,22 @@
 							max={MAX_THROTTLE}
 							step="1"
 							value={loco.throttle}
-							oninput={(e) =>
-								setThrottle(loco.id, +(e.currentTarget as HTMLInputElement).value)}
+							oninput={(e) => setThrottle(loco.id, +(e.currentTarget as HTMLInputElement).value)}
 						/>
-						<span class="w-6 text-right tabular-nums text-slate-600">{loco.throttle}</span>
+						<span class="w-6 text-right text-slate-600 tabular-nums">{loco.throttle}</span>
 					</label>
 
 					<div class="flex items-center gap-1.5">
 						<span class="text-slate-700">Wagons</span>
 						<button
-							class="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-800 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+							class="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
 							onclick={() => removeWagon(loco.id)}
 							disabled={loco.wagons.length === 0}
 							aria-label="Remove wagon from Loco {loco.id}"
 						>
 							−
 						</button>
-						<span class="w-5 text-center tabular-nums text-slate-700">{loco.wagons.length}</span>
+						<span class="w-5 text-center text-slate-700 tabular-nums">{loco.wagons.length}</span>
 						<button
 							class="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-800 hover:bg-slate-100"
 							onclick={() => addWagon(loco.id)}
@@ -131,11 +130,11 @@
 					</div>
 
 					{#if loco.stopped}
-						<span class="text-rose-600 font-medium">Derailed</span>
+						<span class="font-medium text-rose-600">Derailed</span>
 					{/if}
 
 					<button
-						class="ml-auto rounded px-2 py-1 border bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+						class="ml-auto rounded border border-slate-300 bg-white px-2 py-1 text-slate-700 hover:bg-slate-100"
 						onclick={() => removeLoco(loco.id)}
 						aria-label="Remove Loco {loco.id}"
 					>

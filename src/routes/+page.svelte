@@ -4,7 +4,7 @@
 	import Toolbar from '$lib/components/Toolbar.svelte';
 	import type { PieceKind } from '$lib/railway/types';
 
-	let tool: PieceKind | 'loco' | 'erase' = $state('straight');
+	let tool: PieceKind | 'loco' | 'erase' | 'draw' = $state('draw');
 	let view: '2d' | '3d' = $state('2d');
 </script>
 
@@ -32,9 +32,10 @@
 			</div>
 		</div>
 		<p class="text-sm text-slate-600">
-			Click cells to place track. Click a piece of the same kind again to rotate it.
-			<span class="font-medium">Shift+click</span> a switch to throw it. Place a locomotive,
-			engage the reverser (Forward or Reverse), then advance the throttle to apply power.
+			Use <span class="font-medium">Draw</span> to drag a continuous path — pieces are chosen
+			automatically; dragging through an existing track creates a switch. Or pick a specific piece
+			and click cells; click a piece of the same kind again to rotate it.
+			<span class="font-medium">Shift+click</span> a switch to throw it.
 		</p>
 		<Toolbar bind:tool />
 		{#if view === '2d'}

@@ -1,11 +1,19 @@
 <script lang="ts">
-	import { grid, getPiece, placePiece, rotateAt, removeAt, toggleAt } from '$lib/railway/grid.svelte';
+	import {
+		grid,
+		getPiece,
+		placePiece,
+		rotateAt,
+		removeAt,
+		toggleAt,
+		drawPath
+	} from '$lib/railway/grid.svelte';
 	import { sim, placeLoco } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { svgPathD, sample } from '$lib/railway/geometry';
-	import { isSwitch, type PieceKind } from '$lib/railway/types';
+	import { dx, dy, opposite, isSwitch, type Dir, type PieceKind } from '$lib/railway/types';
 
-	type Tool = PieceKind | 'loco' | 'erase';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw';
 
 	let { tool }: { tool: Tool } = $props();
 
@@ -14,10 +22,12 @@
 	const widthPx = $derived(grid.width * TILE);
 	const heightPx = $derived(grid.height * TILE);
 
-	const cellEntries = $derived([...grid.cells.entries()].map(([k, piece]) => {
-		const [x, y] = k.split(',').map(Number);
-		return { x, y, piece };
-	}));
+	const cellEntries = $derived(
+		[...grid.cells.entries()].map(([k, piece]) => {
+			const [x, y] = k.split(',').map(Number);
+			return { x, y, piece };
+		})
+	);
 
 	type VehiclePose = {
 		key: string;
@@ -64,23 +74,94 @@
 		return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 	}
 
-	function handleClick(e: MouseEvent) {
-		const svg = e.currentTarget as SVGSVGElement;
+	function cellFromEvent(e: { clientX: number; clientY: number }, svg: SVGSVGElement) {
 		const pt = svg.createSVGPoint();
 		pt.x = e.clientX;
 		pt.y = e.clientY;
 		const ctm = svg.getScreenCTM();
-		if (!ctm) return;
+		if (!ctm) return null;
 		const local = pt.matrixTransform(ctm.inverse());
 		const x = Math.floor(local.x / TILE);
 		const y = Math.floor(local.y / TILE);
-		if (x < 0 || x >= grid.width || y < 0 || y >= grid.height) return;
+		if (x < 0 || x >= grid.width || y < 0 || y >= grid.height) return null;
+		return { x, y };
+	}
+
+	type DrawState = {
+		pointerId: number;
+		moved: boolean;
+		// The cell currently "in progress" — its entry port is known but its exit
+		// port won't be decided until the cursor moves into a neighbour.
+		lastCell: { x: number; y: number };
+		lastEntry: Dir | null;
+	};
+	let draw: DrawState | null = null;
+
+	function stepDirToward(from: { x: number; y: number }, to: { x: number; y: number }): Dir {
+		const ddx = to.x - from.x;
+		const ddy = to.y - from.y;
+		if (Math.abs(ddx) >= Math.abs(ddy)) return (ddx > 0 ? 1 : 3) as Dir;
+		return (ddy > 0 ? 2 : 0) as Dir;
+	}
+
+	function advanceDraw(target: { x: number; y: number }) {
+		if (!draw) return;
+		let safety = 1000;
+		while (safety-- > 0) {
+			const last = draw.lastCell;
+			if (last.x === target.x && last.y === target.y) break;
+			const stepDir = stepDirToward(last, target);
+			const entry = draw.lastEntry ?? opposite(stepDir);
+			drawPath(last.x, last.y, entry, stepDir);
+			draw.lastCell = { x: last.x + dx[stepDir], y: last.y + dy[stepDir] };
+			draw.lastEntry = opposite(stepDir);
+			draw.moved = true;
+		}
+	}
+
+	function handlePointerDown(e: PointerEvent) {
+		if (tool !== 'draw') return;
+		if (e.button !== 0 || e.shiftKey) return;
+		const svg = e.currentTarget as SVGSVGElement;
+		const cell = cellFromEvent(e, svg);
+		if (!cell) return;
+		svg.setPointerCapture(e.pointerId);
+		draw = { pointerId: e.pointerId, moved: false, lastCell: cell, lastEntry: null };
+		e.preventDefault();
+	}
+
+	function handlePointerMove(e: PointerEvent) {
+		if (!draw || e.pointerId !== draw.pointerId) return;
+		const svg = e.currentTarget as SVGSVGElement;
+		const cell = cellFromEvent(e, svg);
+		if (!cell) return;
+		advanceDraw(cell);
+	}
+
+	function handlePointerUp(e: PointerEvent) {
+		if (!draw || e.pointerId !== draw.pointerId) return;
+		const svg = e.currentTarget as SVGSVGElement;
+		if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+		// Stub the trailing cell as a straight extension if drawing made any progress.
+		if (draw.moved && draw.lastEntry !== null) {
+			const { x, y } = draw.lastCell;
+			drawPath(x, y, draw.lastEntry, opposite(draw.lastEntry));
+		}
+		draw = null;
+	}
+
+	function handleClick(e: MouseEvent) {
+		const svg = e.currentTarget as SVGSVGElement;
+		const cell = cellFromEvent(e, svg);
+		if (!cell) return;
+		const { x, y } = cell;
 
 		const existing = getPiece(x, y);
 		if (e.shiftKey) {
 			if (existing && isSwitch(existing.kind)) toggleAt(x, y);
 			return;
 		}
+		if (tool === 'draw') return; // pointerdown/up handles drawing
 		if (tool === 'erase') {
 			removeAt(x, y);
 			return;
@@ -104,18 +185,18 @@
 	width={widthPx}
 	height={heightPx}
 	class="border border-slate-400 bg-slate-50 select-none"
+	class:cursor-crosshair={tool === 'draw'}
 	onclick={handleClick}
+	onpointerdown={handlePointerDown}
+	onpointermove={handlePointerMove}
+	onpointerup={handlePointerUp}
+	onpointercancel={handlePointerUp}
 	role="img"
 	aria-label="Track grid"
 >
 	<defs>
 		<pattern id="gridPattern" width={TILE} height={TILE} patternUnits="userSpaceOnUse">
-			<path
-				d={`M ${TILE} 0 L 0 0 0 ${TILE}`}
-				fill="none"
-				stroke="#cbd5e1"
-				stroke-width="1"
-			/>
+			<path d={`M ${TILE} 0 L 0 0 0 ${TILE}`} fill="none" stroke="#cbd5e1" stroke-width="1" />
 		</pattern>
 	</defs>
 

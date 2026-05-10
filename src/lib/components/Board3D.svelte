@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Canvas, T } from '@threlte/core';
 	import * as THREE from 'three';
+	import { mode } from 'mode-watcher';
 	import {
 		grid,
 		getPiece,
@@ -18,10 +19,33 @@
 	let { tool }: { tool: Tool } = $props();
 
 	const TILE = 1;
-	const PX_PER_TILE = 40;
+	const PX_PER_TILE = 56;
 
 	let camera: THREE.PerspectiveCamera | undefined = $state();
 	let wrapper: HTMLDivElement | undefined = $state();
+
+	const isDark = $derived(mode.current === 'dark');
+	const palette = $derived(
+		isDark
+			? {
+					ground: '#1e293b',
+					gridLine: '#334155',
+					trackActive: '#e2e8f0',
+					trackInactive: '#475569',
+					switchMarker: '#22c55e',
+					ambient: 0.6,
+					directional: 0.7
+				}
+			: {
+					ground: '#f8fafc',
+					gridLine: '#cbd5e1',
+					trackActive: '#475569',
+					trackInactive: '#cbd5e1',
+					switchMarker: '#16a34a',
+					ambient: 0.55,
+					directional: 0.85
+				}
+	);
 
 	const widthW = $derived(grid.width * TILE);
 	const heightW = $derived(grid.height * TILE);
@@ -156,24 +180,27 @@
 	onclick={handleClick}
 	role="img"
 	aria-label="Track grid (3D)"
-	class="border border-slate-400 bg-slate-50 select-none"
+	class="block bg-board-bg select-none"
 	style="width: {widthPx}px; height: {heightPx}px;"
 >
 	<Canvas>
 		<T.PerspectiveCamera bind:ref={camera} makeDefault fov={40} near={0.1} far={500} />
 
-		<T.AmbientLight intensity={0.55} />
-		<T.DirectionalLight position={[widthW, heightW * 1.5, heightW]} intensity={0.85} />
+		<T.AmbientLight intensity={palette.ambient} />
+		<T.DirectionalLight
+			position={[widthW, heightW * 1.5, heightW]}
+			intensity={palette.directional}
+		/>
 
 		<!-- Ground -->
 		<T.Mesh position={[widthW / 2, 0, heightW / 2]} rotation={[-Math.PI / 2, 0, 0]}>
 			<T.PlaneGeometry args={[widthW, heightW]} />
-			<T.MeshStandardMaterial color="#f8fafc" />
+			<T.MeshStandardMaterial color={palette.ground} />
 		</T.Mesh>
 
 		<!-- Grid lines -->
 		<T.LineSegments geometry={gridLineGeom}>
-			<T.LineBasicMaterial color="#cbd5e1" />
+			<T.LineBasicMaterial color={palette.gridLine} />
 		</T.LineSegments>
 
 		<!-- Tracks -->
@@ -184,7 +211,7 @@
 				{@const inactive = switchTile && i !== activeIdx}
 				<T.Mesh geometry={buildTubeGeom(path, x, y)}>
 					<T.MeshStandardMaterial
-						color={inactive ? '#cbd5e1' : '#475569'}
+						color={inactive ? palette.trackInactive : palette.trackActive}
 						opacity={inactive ? 0.7 : 1}
 						transparent={inactive}
 					/>
@@ -193,7 +220,7 @@
 			{#if switchTile}
 				<T.Mesh position={[x + 0.5, 0.12, y + 0.5]}>
 					<T.SphereGeometry args={[0.07, 12, 12]} />
-					<T.MeshStandardMaterial color="#16a34a" />
+					<T.MeshStandardMaterial color={palette.switchMarker} />
 				</T.Mesh>
 			{/if}
 		{/each}

@@ -1,3 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=Cal+Sans&family=Inter:wght@400;500;600;700&display=swap');
+
 @import 'tailwindcss';
+@import 'tw-animate-css';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+	--background: oklch(0.99 0.003 264);
+	--foreground: oklch(0.18 0.02 264);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.18 0.02 264);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.18 0.02 264);
+	--primary: oklch(0.55 0.18 263);
+	--primary-foreground: oklch(0.99 0.005 264);
+	--secondary: oklch(0.96 0.01 264);
+	--secondary-foreground: oklch(0.22 0.02 264);
+	--muted: oklch(0.96 0.005 264);
+	--muted-foreground: oklch(0.5 0.015 264);
+	--accent: oklch(0.94 0.04 263);
+	--accent-foreground: oklch(0.22 0.04 263);
+	--destructive: oklch(0.6 0.22 25);
+	--destructive-foreground: oklch(0.99 0.01 25);
+	--border: oklch(0.91 0.005 264);
+	--input: oklch(0.91 0.005 264);
+	--ring: oklch(0.55 0.18 263);
+	--radius: 0.625rem;
+
+	--board-bg: oklch(0.985 0.005 264);
+	--board-grid: oklch(0.88 0.005 264);
+	--board-border: oklch(0.84 0.008 264);
+	--track-active: oklch(0.45 0.04 263);
+	--track-inactive: oklch(0.82 0.008 264);
+	--track-rail: oklch(0.92 0.005 264);
+	--switch-marker: oklch(0.7 0.18 145);
+}
+
+.dark {
+	--background: oklch(0.16 0.012 264);
+	--foreground: oklch(0.96 0.005 264);
+	--card: oklch(0.2 0.013 264);
+	--card-foreground: oklch(0.96 0.005 264);
+	--popover: oklch(0.2 0.013 264);
+	--popover-foreground: oklch(0.96 0.005 264);
+	--primary: oklch(0.7 0.16 263);
+	--primary-foreground: oklch(0.18 0.04 263);
+	--secondary: oklch(0.26 0.015 264);
+	--secondary-foreground: oklch(0.96 0.005 264);
+	--muted: oklch(0.24 0.013 264);
+	--muted-foreground: oklch(0.7 0.012 264);
+	--accent: oklch(0.32 0.05 263);
+	--accent-foreground: oklch(0.96 0.01 264);
+	--destructive: oklch(0.62 0.22 25);
+	--destructive-foreground: oklch(0.99 0.01 25);
+	--border: oklch(0.28 0.014 264);
+	--input: oklch(0.28 0.014 264);
+	--ring: oklch(0.7 0.16 263);
+
+	--board-bg: oklch(0.18 0.012 264);
+	--board-grid: oklch(0.27 0.014 264);
+	--board-border: oklch(0.32 0.014 264);
+	--track-active: oklch(0.85 0.02 263);
+	--track-inactive: oklch(0.36 0.018 264);
+	--track-rail: oklch(0.42 0.018 264);
+	--switch-marker: oklch(0.72 0.18 145);
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+
+	--color-board-bg: var(--board-bg);
+	--color-board-grid: var(--board-grid);
+	--color-board-border: var(--board-border);
+	--color-track-active: var(--track-active);
+	--color-track-inactive: var(--track-inactive);
+	--color-track-rail: var(--track-rail);
+	--color-switch-marker: var(--switch-marker);
+
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+
+	--font-sans:
+		'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+		sans-serif;
+	--font-display: 'Cal Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+	html {
+		font-family: var(--font-sans);
+	}
+	body {
+		background-color: var(--color-background);
+		color: var(--color-foreground);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+	*,
+	::before,
+	::after {
+		border-color: var(--color-border);
+	}
+}

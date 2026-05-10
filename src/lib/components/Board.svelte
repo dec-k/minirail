@@ -17,7 +17,7 @@
 
 	let { tool }: { tool: Tool } = $props();
 
-	const TILE = 40;
+	const TILE = 56;
 
 	const widthPx = $derived(grid.width * TILE);
 	const heightPx = $derived(grid.height * TILE);
@@ -184,7 +184,7 @@
 	viewBox="0 0 {widthPx} {heightPx}"
 	width={widthPx}
 	height={heightPx}
-	class="border border-slate-400 bg-slate-50 select-none"
+	class="block bg-board-bg select-none"
 	class:cursor-crosshair={tool === 'draw'}
 	onclick={handleClick}
 	onpointerdown={handlePointerDown}
@@ -196,7 +196,12 @@
 >
 	<defs>
 		<pattern id="gridPattern" width={TILE} height={TILE} patternUnits="userSpaceOnUse">
-			<path d={`M ${TILE} 0 L 0 0 0 ${TILE}`} fill="none" stroke="#cbd5e1" stroke-width="1" />
+			<path
+				d={`M ${TILE} 0 L 0 0 0 ${TILE}`}
+				fill="none"
+				class="stroke-board-grid"
+				stroke-width="1"
+			/>
 		</pattern>
 	</defs>
 
@@ -206,29 +211,33 @@
 		{@const switchTile = isSwitch(piece.kind)}
 		{@const activeIdx = piece.active ?? 0}
 		<g transform="translate({x * TILE} {y * TILE})">
-			<rect width={TILE} height={TILE} fill="#1e293b" opacity="0.04" />
+			<rect width={TILE} height={TILE} class="fill-foreground/3" />
 			{#each pathsOf(piece) as path, i}
 				{@const inactive = switchTile && i !== activeIdx}
 				<path
 					d={svgPathD(path, TILE)}
 					fill="none"
-					stroke={inactive ? '#cbd5e1' : '#475569'}
-					stroke-width={inactive ? 4 : 6}
+					class={inactive ? 'stroke-track-inactive opacity-70' : 'stroke-track-active'}
+					stroke-width={inactive ? Math.round(TILE * 0.1) : Math.round(TILE * 0.15)}
 					stroke-linecap="round"
-					opacity={inactive ? 0.7 : 1}
 				/>
 				{#if !inactive}
 					<path
 						d={svgPathD(path, TILE)}
 						fill="none"
-						stroke="#cbd5e1"
-						stroke-width="2"
-						stroke-dasharray="3 3"
+						class="stroke-track-rail"
+						stroke-width={Math.max(2, Math.round(TILE * 0.05))}
+						stroke-dasharray="4 4"
 					/>
 				{/if}
 			{/each}
 			{#if switchTile}
-				<circle cx={TILE / 2} cy={TILE / 2} r="3" fill="#16a34a" />
+				<circle
+					cx={TILE / 2}
+					cy={TILE / 2}
+					r={Math.max(3, Math.round(TILE * 0.075))}
+					class="fill-switch-marker"
+				/>
 			{/if}
 		</g>
 	{/each}
@@ -237,26 +246,32 @@
 		<g transform="translate({pose.x} {pose.y}) rotate({pose.heading})">
 			{#if pose.kind === 'loco'}
 				<rect
-					x="-12"
-					y="-7"
-					width="24"
-					height="14"
-					rx="3"
+					x={-TILE * 0.32}
+					y={-TILE * 0.18}
+					width={TILE * 0.64}
+					height={TILE * 0.36}
+					rx={TILE * 0.08}
 					fill={pose.color}
 					stroke={darken(pose.color)}
-					stroke-width="1"
+					stroke-width="1.5"
 				/>
-				<rect x="6" y="-4" width="6" height="8" fill="#fbbf24" />
+				<rect
+					x={TILE * 0.16}
+					y={-TILE * 0.1}
+					width={TILE * 0.16}
+					height={TILE * 0.2}
+					fill="#fbbf24"
+				/>
 			{:else}
 				<rect
-					x="-10"
-					y="-6"
-					width="20"
-					height="12"
-					rx="2"
+					x={-TILE * 0.27}
+					y={-TILE * 0.16}
+					width={TILE * 0.54}
+					height={TILE * 0.32}
+					rx={TILE * 0.06}
 					fill={pose.color}
 					stroke={darken(pose.color)}
-					stroke-width="1"
+					stroke-width="1.5"
 				/>
 			{/if}
 		</g>

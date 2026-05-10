@@ -97,7 +97,7 @@
 						key: `wagon-${l.id}-${i}`,
 						kind: 'wagon',
 						color: l.color,
-						occupied: i < l.passengers,
+						occupied: i < l.passengers.length,
 						...wp
 					});
 			}

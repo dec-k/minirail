@@ -66,10 +66,36 @@
 						key: `wagon-${l.id}-${i}`,
 						kind: 'wagon',
 						color: l.color,
-						occupied: i < l.passengers,
+						occupied: i < l.passengers.length,
 						...wp
 					});
 			}
+		}
+		return out;
+	});
+
+	type LocoBadge = {
+		key: string;
+		x: number;
+		y: number;
+		passengers: number;
+		capacity: number;
+		boarding: boolean;
+	};
+
+	const locoBadges = $derived.by(() => {
+		const out: LocoBadge[] = [];
+		for (const l of sim.locos) {
+			const lp = poseOf(l);
+			if (!lp) continue;
+			out.push({
+				key: `badge-${l.id}`,
+				x: lp.x,
+				y: lp.y,
+				passengers: l.passengers.length,
+				capacity: l.wagons.length,
+				boarding: l.boardingAt !== null
+			});
 		}
 		return out;
 	});
@@ -335,6 +361,33 @@
 					/>
 				{/if}
 			{/if}
+		</g>
+	{/each}
+
+	{#each locoBadges as b (b.key)}
+		<g transform="translate({b.x} {b.y - TILE * 0.45})">
+			<rect
+				x={-TILE * 0.22}
+				y={-TILE * 0.13}
+				width={TILE * 0.44}
+				height={TILE * 0.24}
+				rx={TILE * 0.05}
+				fill={b.boarding ? '#10b981' : '#1e293b'}
+				fill-opacity="0.9"
+				stroke="#ffffff"
+				stroke-width="1"
+			/>
+			<text
+				x="0"
+				y="0"
+				text-anchor="middle"
+				dominant-baseline="middle"
+				font-size={TILE * 0.16}
+				font-weight="700"
+				fill="#ffffff"
+			>
+				{b.passengers}/{b.capacity}
+			</text>
 		</g>
 	{/each}
 </svg>

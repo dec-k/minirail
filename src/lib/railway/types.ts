@@ -57,11 +57,19 @@ export type Loco = Vehicle & {
 	throttle: number;
 	wagons: Wagon[];
 	routingTrail: RoutingDecision[];
-	passengers: number;
+	// One entry per onboard passenger; the value is the cellKey of the station
+	// where that passenger boarded. Passengers only dismount at a station whose
+	// key differs from their own — so they don't immediately get off where they
+	// just got on.
+	passengers: string[];
 	// cellKey of the station the loco is currently boarding at, or null.
 	boardingAt: string | null;
 	// Seconds since the last boarding tick fired.
 	boardingTimer: number;
+	// cellKey of the station the loco most recently finished boarding at, or
+	// null. Suppresses re-triggering boarding on the same tile while the loco
+	// hasn't physically moved off it; cleared when the loco enters a new cell.
+	lastBoardedAt: string | null;
 };
 
 export type Station = {

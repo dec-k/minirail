@@ -63,9 +63,10 @@ export function placeLoco(x: number, y: number) {
 		routingCursor: 0,
 		wagons: [],
 		routingTrail: [],
-		passengers: 0,
+		passengers: [],
 		boardingAt: null,
-		boardingTimer: 0
+		boardingTimer: 0,
+		lastBoardedAt: null
 	});
 }
 
@@ -217,6 +218,7 @@ function distanceToNextStop(loco: Loco, maxDist: number): number {
 	let cursor = loco.routingCursor;
 	let dist = 0;
 	let safety = 64;
+	let first = true;
 	while (dist <= maxDist && safety-- > 0) {
 		const piece = getPiece(x, y);
 		if (!piece) return Infinity;
@@ -224,11 +226,13 @@ function distanceToNextStop(loco: Loco, maxDist: number): number {
 		const path = paths[pathIdx];
 		const pl = pathLength(path);
 		const effDir = (dir * motionSign) as 1 | -1;
-		// A station with people waiting is the only stop trigger. Existing
-		// passengers will dismount as a phase of that stop — they don't cause
-		// the train to halt at otherwise-empty stations on their own.
-		const station = grid.stations.get(cellKey(x, y));
-		if (station && station.peopleWaiting > 0) {
+		// Stop at this tile iff something useful would happen — either we'd let
+		// a foreign-origin passenger off, or board a fresh one with capacity to
+		// spare. Skip the loco's current tile if it just finished boarding here,
+		// so the lookahead doesn't immediately re-trigger on the same tile.
+		const tk = cellKey(x, y);
+		const justLeftHere = first && loco.lastBoardedAt === tk;
+		if (!justLeftHere && shouldStopAt(loco, tk)) {
 			const targetT = 0.5;
 			let distToCentre: number;
 			if (effDir === 1) distToCentre = (targetT - t) * pl;
@@ -279,21 +283,37 @@ function distanceToNextStop(loco: Loco, maxDist: number): number {
 		const newEff = (chosen.entry === 'from' ? 1 : -1) as 1 | -1;
 		dir = (newEff * motionSign) as 1 | -1;
 		t = chosen.entry === 'from' ? 0 : 1;
+		first = false;
 	}
 	return Infinity;
 }
 
+// True if stopping the loco at `stationKey` would actually do something —
+// either let a passenger off (one whose origin is somewhere else) or board a
+// new person (station has people AND the train has free wagon capacity).
+function shouldStopAt(loco: Loco, stationKey: string): boolean {
+	if (loco.wagons.length === 0) return false;
+	const station = grid.stations.get(stationKey);
+	if (!station) return false;
+	if (station.peopleWaiting > 0 && loco.passengers.length < loco.wagons.length) return true;
+	for (const origin of loco.passengers) if (origin !== stationKey) return true;
+	return false;
+}
+
 function maybeStartBoarding(l: Loco) {
 	if (l.boardingAt) return;
-	if (l.wagons.length === 0) return;
 	const k = cellKey(l.x, l.y);
-	const station = grid.stations.get(k);
-	if (!station) return;
-	// Only stations with waiting people trigger a stop — existing passengers
-	// dismount as a side effect of that stop, not on their own.
-	if (station.peopleWaiting <= 0) return;
+	// Don't immediately re-board the station the loco just departed from.
+	if (l.lastBoardedAt === k) return;
+	if (!shouldStopAt(l, k)) return;
 	if (Math.abs(l.t - 0.5) > 0.05) return;
 	l.boardingAt = k;
+	l.boardingTimer = 0;
+}
+
+function releaseBoarding(l: Loco) {
+	l.lastBoardedAt = l.boardingAt;
+	l.boardingAt = null;
 	l.boardingTimer = 0;
 }
 
@@ -302,31 +322,30 @@ function tickBoarding(l: Loco, dt: number) {
 	l.boardingTimer += dt;
 	while (l.boardingTimer >= BOARDING_INTERVAL) {
 		l.boardingTimer -= BOARDING_INTERVAL;
-		const station = grid.stations.get(l.boardingAt);
+		const stationKey = l.boardingAt;
+		const station = grid.stations.get(stationKey);
 		if (!station) {
-			l.boardingAt = null;
-			l.boardingTimer = 0;
+			releaseBoarding(l);
 			return;
 		}
-		// Phase 1: dismount existing passengers one at a time.
-		if (l.passengers > 0) {
-			l.passengers -= 1;
+		// Phase 1: dismount one passenger whose origin is not this station.
+		const foreignIdx = l.passengers.findIndex((origin) => origin !== stationKey);
+		if (foreignIdx >= 0) {
+			l.passengers.splice(foreignIdx, 1);
 			continue;
 		}
-		// Phase 2: board waiting people, up to wagon capacity.
-		if (station.peopleWaiting > 0 && l.passengers < l.wagons.length) {
+		// Phase 2: board a waiting person if there's wagon capacity.
+		if (station.peopleWaiting > 0 && l.passengers.length < l.wagons.length) {
 			station.peopleWaiting -= 1;
-			l.passengers += 1;
-			if (station.peopleWaiting === 0 || l.passengers >= l.wagons.length) {
-				l.boardingAt = null;
-				l.boardingTimer = 0;
+			l.passengers.push(stationKey);
+			if (station.peopleWaiting === 0 || l.passengers.length >= l.wagons.length) {
+				releaseBoarding(l);
 				return;
 			}
 			continue;
 		}
-		// Nothing to do — release.
-		l.boardingAt = null;
-		l.boardingTimer = 0;
+		// No foreign passengers to drop off and no boarding possible — done.
+		releaseBoarding(l);
 		return;
 	}
 }
@@ -334,12 +353,12 @@ function tickBoarding(l: Loco, dt: number) {
 function tickStations(dt: number) {
 	// Stations actively servicing a train don't accumulate new arrivals — their
 	// spawn timer freezes for the duration of (un)loading and resumes on depart.
-	const beingBoarded = new Set<string>();
+	const beingBoarded: Record<string, true> = {};
 	for (const l of sim.locos) {
-		if (l.boardingAt) beingBoarded.add(l.boardingAt);
+		if (l.boardingAt) beingBoarded[l.boardingAt] = true;
 	}
 	for (const [k, station] of grid.stations) {
-		if (beingBoarded.has(k)) continue;
+		if (beingBoarded[k]) continue;
 		if (station.peopleWaiting >= STATION_CAPACITY) {
 			station.spawnTimer = 0;
 			continue;
@@ -377,11 +396,15 @@ function loop() {
 			}
 			const sign = l.reverser as 1 | -1;
 			if (dist > 1e-9) {
+				const prevKey = cellKey(l.x, l.y);
 				step(l, dist, sign, l.routingTrail);
 				for (const w of l.wagons) {
 					if (!w.stopped) step(w, dist, sign, l.routingTrail);
 				}
 				pruneTrail(l);
+				if (l.lastBoardedAt && cellKey(l.x, l.y) !== prevKey) {
+					l.lastBoardedAt = null;
+				}
 			}
 		}
 		maybeStartBoarding(l);

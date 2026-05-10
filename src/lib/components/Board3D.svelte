@@ -8,14 +8,15 @@
 		placePiece,
 		rotateAt,
 		removeAt,
-		toggleAt
+		toggleAt,
+		toggleStationAt
 	} from '$lib/railway/grid.svelte';
-	import { sim, placeLoco } from '$lib/railway/sim.svelte';
+	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { sample, isStraight } from '$lib/railway/geometry';
 	import { isSwitch, cellKey, type PieceKind, type TilePath } from '$lib/railway/types';
 
-	type Tool = PieceKind | 'loco' | 'erase' | 'draw';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station';
 	let { tool }: { tool: Tool } = $props();
 
 	const TILE = 1;
@@ -63,6 +64,7 @@
 		key: string;
 		kind: 'loco' | 'wagon';
 		color: string;
+		occupied: boolean;
 		x: number;
 		z: number;
 		rotY: number;
@@ -86,10 +88,18 @@
 		const out: VehiclePose[] = [];
 		for (const l of sim.locos) {
 			const lp = poseOf(l);
-			if (lp) out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, ...lp });
+			if (lp)
+				out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, occupied: false, ...lp });
 			for (let i = 0; i < l.wagons.length; i++) {
 				const wp = poseOf(l.wagons[i]);
-				if (wp) out.push({ key: `wagon-${l.id}-${i}`, kind: 'wagon', color: l.color, ...wp });
+				if (wp)
+					out.push({
+						key: `wagon-${l.id}-${i}`,
+						kind: 'wagon',
+						color: l.color,
+						occupied: i < l.passengers,
+						...wp
+					});
 			}
 		}
 		return out;
@@ -165,12 +175,24 @@
 			placeLoco(x, y);
 			return;
 		}
+		if (tool === 'station') {
+			toggleStationAt(x, y);
+			kickSimulation();
+			return;
+		}
 		if (existing && existing.kind === tool) {
 			rotateAt(x, y);
 		} else {
 			placePiece(x, y, tool);
 		}
 	}
+
+	const stationEntries = $derived(
+		[...grid.stations.entries()].map(([k, station]) => {
+			const [x, y] = k.split(',').map(Number);
+			return { x, y, station };
+		})
+	);
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -225,6 +247,23 @@
 			{/if}
 		{/each}
 
+		<!-- Stations -->
+		{#each stationEntries as { x, y, station } (`station-${cellKey(x, y)}`)}
+			{@const hasPeople = station.peopleWaiting > 0}
+			<T.Group position={[x + 0.5, 0.05, y + 0.5]}>
+				<T.Mesh position={[0, 0.04, -0.4]}>
+					<T.BoxGeometry args={[0.9, 0.08, 0.18]} />
+					<T.MeshStandardMaterial color={hasPeople ? '#f59e0b' : '#94a3b8'} />
+				</T.Mesh>
+				{#each [...Array(Math.min(station.peopleWaiting, 10)).keys()] as i (i)}
+					<T.Mesh position={[-0.36 + i * 0.08, 0.16, -0.4]}>
+						<T.BoxGeometry args={[0.06, 0.16, 0.06]} />
+						<T.MeshStandardMaterial color="#fef3c7" />
+					</T.Mesh>
+				{/each}
+			</T.Group>
+		{/each}
+
 		<!-- Vehicles -->
 		{#each vehiclePoses as pose (pose.key)}
 			<T.Group position={[pose.x, 0.18, pose.z]} rotation={[0, pose.rotY, 0]}>
@@ -242,6 +281,12 @@
 						<T.BoxGeometry args={[0.5, 0.22, 0.28]} />
 						<T.MeshStandardMaterial color={pose.color} />
 					</T.Mesh>
+					{#if pose.occupied}
+						<T.Mesh position={[0, 0.16, 0]}>
+							<T.BoxGeometry args={[0.12, 0.12, 0.12]} />
+							<T.MeshStandardMaterial color="#fef3c7" />
+						</T.Mesh>
+					{/if}
 				{/if}
 			</T.Group>
 		{/each}

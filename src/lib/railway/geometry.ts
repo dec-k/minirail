@@ -10,7 +10,7 @@ const PORT_MIDPOINT: Record<Dir, [number, number]> = {
 export type PathSample = { x: number; y: number; heading: number };
 
 export function isStraight(path: TilePath): boolean {
-	return ((path.from + 2) % 4) === path.to;
+	return (path.from + 2) % 4 === path.to;
 }
 
 function arcCenter(a: Dir, b: Dir): [number, number] {

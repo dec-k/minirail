@@ -26,7 +26,7 @@ The interesting code lives under [src/lib/railway/](src/lib/railway/). It is org
 
 ### Track-piece model — port-based, declarative
 
-A tile is a unit square. Each edge has a midpoint (a *port*) numbered N=0, E=1, S=2, W=3. A `TilePath` is just `{ from: Dir, to: Dir }` — the two ports it connects. Pieces are declared by listing their base paths, then rotated at runtime:
+A tile is a unit square. Each edge has a midpoint (a _port_) numbered N=0, E=1, S=2, W=3. A `TilePath` is just `{ from: Dir, to: Dir }` — the two ports it connects. Pieces are declared by listing their base paths, then rotated at runtime:
 
 - [pieces.ts](src/lib/railway/pieces.ts) — `BASE_PATHS` maps each `PieceKind` to its rotation-0 paths. `pathsOf(piece)` rotates the ports via `rotateDir`. **To add a new piece type: add a row to `BASE_PATHS` and extend the `PieceKind` union in [types.ts](src/lib/railway/types.ts).** Geometry, rendering, and routing all flow from this table — no other code changes needed unless the piece needs new switch-like state.
 - [geometry.ts](src/lib/railway/geometry.ts) — `sample(path, t)` returns `{x, y, heading}` in tile-local 0..1 space. A path is a straight line iff `from` and `to` are opposite (`(from + 2) % 4 === to`); otherwise it's a quarter-circle whose centre is the corner shared by the two adjacent ports. `svgPathD` produces SVG `d` attributes for rendering. Heading uses screen-space convention (y-down).
@@ -49,6 +49,7 @@ The two state modules are intentionally separate so that editing the world while
 `step(loco, distance)` in [sim.svelte.ts](src/lib/railway/sim.svelte.ts) advances the loco by a distance in tile units, carrying remainder across tile boundaries in a `while` loop (so high speed / dropped frames don't skip tiles). Path lengths differ — straight = 1, curve = π/4 — so distance is the right currency, not `t`. The loco state `{x, y, pathIdx, t, dir}` is enough to fully specify position.
 
 At a tile boundary the algorithm:
+
 1. Computes the exit port from the current path + direction.
 2. Steps to the neighbour tile via `dx`/`dy` lookup tables; the entry port is the opposite.
 3. Collects all candidate paths in the neighbour whose `from` or `to` equals the entry port. **Zero candidates → derail (`stopped = true`); multiple candidates → it's a switch facing-point, pick `paths[active]`.**

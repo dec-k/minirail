@@ -29,10 +29,11 @@
 		Square,
 		X,
 		CornerDownRight,
-		CornerDownLeft
+		CornerDownLeft,
+		Building2
 	} from 'lucide-svelte';
 
-	type Tool = PieceKind | 'loco' | 'erase' | 'draw';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station';
 	type Icon = typeof Pencil;
 
 	let { tool = $bindable() }: { tool: Tool } = $props();
@@ -44,6 +45,7 @@
 		{ id: 'switch-left', label: 'Switch L', icon: CornerDownLeft },
 		{ id: 'switch-right', label: 'Switch R', icon: CornerDownRight },
 		{ id: 'loco', label: 'Locomotive', icon: TrainFront },
+		{ id: 'station', label: 'Station', icon: Building2 },
 		{ id: 'erase', label: 'Erase', icon: Eraser }
 	];
 

@@ -6,14 +6,15 @@
 		rotateAt,
 		removeAt,
 		toggleAt,
-		drawPath
+		drawPath,
+		toggleStationAt
 	} from '$lib/railway/grid.svelte';
-	import { sim, placeLoco } from '$lib/railway/sim.svelte';
+	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { svgPathD, sample } from '$lib/railway/geometry';
 	import { dx, dy, opposite, isSwitch, type Dir, type PieceKind } from '$lib/railway/types';
 
-	type Tool = PieceKind | 'loco' | 'erase' | 'draw';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station';
 
 	let { tool }: { tool: Tool } = $props();
 
@@ -33,6 +34,7 @@
 		key: string;
 		kind: 'loco' | 'wagon';
 		color: string;
+		occupied: boolean;
 		x: number;
 		y: number;
 		heading: number;
@@ -55,10 +57,18 @@
 		const out: VehiclePose[] = [];
 		for (const l of sim.locos) {
 			const lp = poseOf(l);
-			if (lp) out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, ...lp });
+			if (lp)
+				out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, occupied: false, ...lp });
 			for (let i = 0; i < l.wagons.length; i++) {
 				const wp = poseOf(l.wagons[i]);
-				if (wp) out.push({ key: `wagon-${l.id}-${i}`, kind: 'wagon', color: l.color, ...wp });
+				if (wp)
+					out.push({
+						key: `wagon-${l.id}-${i}`,
+						kind: 'wagon',
+						color: l.color,
+						occupied: i < l.passengers,
+						...wp
+					});
 			}
 		}
 		return out;
@@ -170,12 +180,24 @@
 			placeLoco(x, y);
 			return;
 		}
+		if (tool === 'station') {
+			toggleStationAt(x, y);
+			kickSimulation();
+			return;
+		}
 		if (existing && existing.kind === tool) {
 			rotateAt(x, y);
 		} else {
 			placePiece(x, y, tool);
 		}
 	}
+
+	const stationEntries = $derived(
+		[...grid.stations.entries()].map(([k, station]) => {
+			const [x, y] = k.split(',').map(Number);
+			return { x, y, station };
+		})
+	);
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -212,7 +234,7 @@
 		{@const activeIdx = piece.active ?? 0}
 		<g transform="translate({x * TILE} {y * TILE})">
 			<rect width={TILE} height={TILE} class="fill-foreground/3" />
-			{#each pathsOf(piece) as path, i}
+			{#each pathsOf(piece) as path, i (i)}
 				{@const inactive = switchTile && i !== activeIdx}
 				<path
 					d={svgPathD(path, TILE)}
@@ -239,6 +261,35 @@
 					class="fill-switch-marker"
 				/>
 			{/if}
+		</g>
+	{/each}
+
+	{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
+		{@const hasPeople = station.peopleWaiting > 0}
+		<g transform="translate({x * TILE} {y * TILE})">
+			<rect
+				x={TILE * 0.08}
+				y={TILE * 0.04}
+				width={TILE * 0.84}
+				height={TILE * 0.28}
+				rx={TILE * 0.06}
+				fill={hasPeople ? '#f59e0b' : '#94a3b8'}
+				fill-opacity="0.92"
+				stroke={hasPeople ? '#92400e' : '#475569'}
+				stroke-width="1.5"
+			/>
+			<text
+				x={TILE * 0.5}
+				y={TILE * 0.22}
+				text-anchor="middle"
+				dominant-baseline="middle"
+				font-size={TILE * 0.2}
+				font-weight="700"
+				fill="#ffffff"
+				style="paint-order: stroke; stroke: rgba(0,0,0,0.35); stroke-width: 2;"
+			>
+				{station.peopleWaiting}
+			</text>
 		</g>
 	{/each}
 
@@ -273,6 +324,16 @@
 					stroke={darken(pose.color)}
 					stroke-width="1.5"
 				/>
+				{#if pose.occupied}
+					<circle
+						cx="0"
+						cy="0"
+						r={TILE * 0.08}
+						fill="#fef3c7"
+						stroke={darken(pose.color)}
+						stroke-width="1"
+					/>
+				{/if}
 			{/if}
 		</g>
 	{/each}

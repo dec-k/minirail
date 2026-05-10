@@ -1,5 +1,12 @@
 import { SvelteMap } from 'svelte/reactivity';
-import { cellKey, type Dir, type Piece, type PieceKind, type Rotation } from './types';
+import {
+	cellKey,
+	type Dir,
+	type Piece,
+	type PieceKind,
+	type Rotation,
+	type Station
+} from './types';
 import {
 	newPiece,
 	pathsOf,
@@ -12,7 +19,8 @@ import {
 export const grid = $state({
 	width: 20,
 	height: 15,
-	cells: new SvelteMap<string, Piece>()
+	cells: new SvelteMap<string, Piece>(),
+	stations: new SvelteMap<string, Station>()
 });
 
 export function getPiece(x: number, y: number): Piece | undefined {
@@ -35,10 +43,28 @@ export function toggleAt(x: number, y: number) {
 
 export function removeAt(x: number, y: number) {
 	grid.cells.delete(cellKey(x, y));
+	grid.stations.delete(cellKey(x, y));
 }
 
 export function clearAll() {
 	grid.cells.clear();
+	grid.stations.clear();
+}
+
+export function getStation(x: number, y: number): Station | undefined {
+	return grid.stations.get(cellKey(x, y));
+}
+
+// Add or remove a station at (x, y). A station only exists alongside a track
+// piece — placing on an empty cell is a no-op.
+export function toggleStationAt(x: number, y: number) {
+	const k = cellKey(x, y);
+	if (grid.stations.has(k)) {
+		grid.stations.delete(k);
+		return;
+	}
+	if (!grid.cells.has(k)) return;
+	grid.stations.set(k, { peopleWaiting: 0, spawnTimer: 0 });
 }
 
 // Place a piece that carries the path {from, to} through (x, y). If the cell
@@ -77,6 +103,9 @@ export function resize(width: number, height: number) {
 	grid.height = height;
 	for (const k of grid.cells.keys()) {
 		const [x, y] = k.split(',').map(Number);
-		if (x < 0 || x >= width || y < 0 || y >= height) grid.cells.delete(k);
+		if (x < 0 || x >= width || y < 0 || y >= height) {
+			grid.cells.delete(k);
+			grid.stations.delete(k);
+		}
 	}
 }

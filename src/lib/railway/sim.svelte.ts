@@ -11,7 +11,7 @@ import {
 } from './types';
 import { pathsOf } from './pieces';
 import { pathLength } from './geometry';
-import { getPiece } from './grid.svelte';
+import { getPiece, grid } from './grid.svelte';
 
 export type { Reverser };
 
@@ -21,6 +21,15 @@ export const sim = $state({
 
 export const MAX_THROTTLE = 8;
 export const WAGON_LENGTH = 0.6;
+// People stop at the centre of the station tile; at this distance the loco
+// begins decelerating to arrive at zero speed.
+export const APPROACH_DIST = 1.8;
+// Seconds between (de)boarding events while the loco is paused at a station.
+export const BOARDING_INTERVAL = 0.35;
+// Seconds between new-passenger spawns at each station.
+export const STATION_SPAWN_INTERVAL = 2;
+// Cap on people waiting at one station.
+export const STATION_CAPACITY = 10;
 
 let rafHandle = 0;
 let lastTime = 0;
@@ -53,24 +62,24 @@ export function placeLoco(x: number, y: number) {
 		throttle: 0,
 		routingCursor: 0,
 		wagons: [],
-		routingTrail: []
+		routingTrail: [],
+		passengers: 0,
+		boardingAt: null,
+		boardingTimer: 0
 	});
 }
 
 export function removeLoco(id: number) {
 	const idx = sim.locos.findIndex((l) => l.id === id);
 	if (idx >= 0) sim.locos.splice(idx, 1);
-	if (!anyMoving() && rafHandle) {
-		cancelAnimationFrame(rafHandle);
-		rafHandle = 0;
-	}
+	// loop() self-cancels via shouldAnimate() — don't tear down here in case
+	// stations still need spawn ticks.
 }
 
 export function clearAllLocos() {
 	sim.locos.length = 0;
 	nextLocoId = 1;
-	if (rafHandle) cancelAnimationFrame(rafHandle);
-	rafHandle = 0;
+	// loop() self-cancels via shouldAnimate().
 }
 
 // Walk a vehicle along the track by `distance`, advancing in v.dir * motionSign.
@@ -81,12 +90,7 @@ export function clearAllLocos() {
 // the recorded pathIdx — keeping the chain consistent with whichever vehicle
 // led through this crossing. If no match is found, the vehicle is acting as
 // leader: it picks based on the switch's current `active` state and appends.
-function step(
-	v: Vehicle,
-	distance: number,
-	motionSign: 1 | -1,
-	trail: RoutingDecision[]
-) {
+function step(v: Vehicle, distance: number, motionSign: 1 | -1, trail: RoutingDecision[]) {
 	let remaining = distance;
 	let safety = 1000;
 	while (remaining > 1e-9 && !v.stopped && safety-- > 0) {
@@ -179,22 +183,204 @@ function anyMoving(): boolean {
 	return sim.locos.some(locoIsMoving);
 }
 
+function anyBoarding(): boolean {
+	return sim.locos.some((l) => l.boardingAt !== null);
+}
+
+function anyStationBacklog(): boolean {
+	for (const s of grid.stations.values()) {
+		if (s.peopleWaiting < STATION_CAPACITY) return true;
+	}
+	return false;
+}
+
+function shouldAnimate(): boolean {
+	return anyMoving() || anyBoarding() || anyStationBacklog();
+}
+
+// Read-only walk forward along the loco's intended route. Returns the distance
+// (in tile units) until the loco reaches the centre of the next station tile
+// where it must stop, or +Infinity if no such station is within `maxDist` (or
+// the loco can't usefully stop — no wagons or no reverser).
+//
+// Mirrors `step`'s routing decisions exactly so the deceleration aim point
+// stays consistent with what the loco will actually do at switches.
+function distanceToNextStop(loco: Loco, maxDist: number): number {
+	if (loco.reverser === 0) return Infinity;
+	if (loco.wagons.length === 0) return Infinity;
+	const motionSign = loco.reverser as 1 | -1;
+	let x = loco.x;
+	let y = loco.y;
+	let pathIdx = loco.pathIdx;
+	let t = loco.t;
+	let dir = loco.dir;
+	let cursor = loco.routingCursor;
+	let dist = 0;
+	let safety = 64;
+	while (dist <= maxDist && safety-- > 0) {
+		const piece = getPiece(x, y);
+		if (!piece) return Infinity;
+		const paths = pathsOf(piece);
+		const path = paths[pathIdx];
+		const pl = pathLength(path);
+		const effDir = (dir * motionSign) as 1 | -1;
+		// A station with people waiting is the only stop trigger. Existing
+		// passengers will dismount as a phase of that stop — they don't cause
+		// the train to halt at otherwise-empty stations on their own.
+		const station = grid.stations.get(cellKey(x, y));
+		if (station && station.peopleWaiting > 0) {
+			const targetT = 0.5;
+			let distToCentre: number;
+			if (effDir === 1) distToCentre = (targetT - t) * pl;
+			else distToCentre = (t - targetT) * pl;
+			if (distToCentre >= -1e-6) return dist + Math.max(0, distToCentre);
+		}
+		const remainingT = effDir === 1 ? 1 - t : t;
+		const remainingDist = remainingT * pl;
+		dist += remainingDist;
+		if (dist > maxDist) return Infinity;
+		const exitDir = effDir === 1 ? path.to : path.from;
+		const nx = x + dx[exitDir];
+		const ny = y + dy[exitDir];
+		const entryDir = opposite(exitDir);
+		const nextPiece = getPiece(nx, ny);
+		if (!nextPiece) return Infinity;
+		const nextPaths = pathsOf(nextPiece);
+		const candidates: { idx: number; entry: 'from' | 'to' }[] = [];
+		for (let i = 0; i < nextPaths.length; i++) {
+			if (nextPaths[i].from === entryDir) candidates.push({ idx: i, entry: 'from' });
+			else if (nextPaths[i].to === entryDir) candidates.push({ idx: i, entry: 'to' });
+		}
+		if (candidates.length === 0) return Infinity;
+		let chosen = candidates[0];
+		if (candidates.length > 1) {
+			const tk = cellKey(nx, ny);
+			let matched: { idx: number; entry: 'from' | 'to' } | null = null;
+			for (let k = cursor; k < loco.routingTrail.length; k++) {
+				const r = loco.routingTrail[k];
+				if (r.tileKey === tk && r.entryPort === entryDir) {
+					const c = candidates.find((cn) => cn.idx === r.pathIdx);
+					if (c) {
+						matched = c;
+						cursor = k + 1;
+						break;
+					}
+				}
+			}
+			if (matched) chosen = matched;
+			else {
+				const active = nextPiece.active ?? 0;
+				chosen = candidates.find((c) => c.idx === active) ?? candidates[0];
+			}
+		}
+		x = nx;
+		y = ny;
+		pathIdx = chosen.idx;
+		const newEff = (chosen.entry === 'from' ? 1 : -1) as 1 | -1;
+		dir = (newEff * motionSign) as 1 | -1;
+		t = chosen.entry === 'from' ? 0 : 1;
+	}
+	return Infinity;
+}
+
+function maybeStartBoarding(l: Loco) {
+	if (l.boardingAt) return;
+	if (l.wagons.length === 0) return;
+	const k = cellKey(l.x, l.y);
+	const station = grid.stations.get(k);
+	if (!station) return;
+	// Only stations with waiting people trigger a stop — existing passengers
+	// dismount as a side effect of that stop, not on their own.
+	if (station.peopleWaiting <= 0) return;
+	if (Math.abs(l.t - 0.5) > 0.05) return;
+	l.boardingAt = k;
+	l.boardingTimer = 0;
+}
+
+function tickBoarding(l: Loco, dt: number) {
+	if (!l.boardingAt) return;
+	l.boardingTimer += dt;
+	while (l.boardingTimer >= BOARDING_INTERVAL) {
+		l.boardingTimer -= BOARDING_INTERVAL;
+		const station = grid.stations.get(l.boardingAt);
+		if (!station) {
+			l.boardingAt = null;
+			l.boardingTimer = 0;
+			return;
+		}
+		// Phase 1: dismount existing passengers one at a time.
+		if (l.passengers > 0) {
+			l.passengers -= 1;
+			continue;
+		}
+		// Phase 2: board waiting people, up to wagon capacity.
+		if (station.peopleWaiting > 0 && l.passengers < l.wagons.length) {
+			station.peopleWaiting -= 1;
+			l.passengers += 1;
+			if (station.peopleWaiting === 0 || l.passengers >= l.wagons.length) {
+				l.boardingAt = null;
+				l.boardingTimer = 0;
+				return;
+			}
+			continue;
+		}
+		// Nothing to do — release.
+		l.boardingAt = null;
+		l.boardingTimer = 0;
+		return;
+	}
+}
+
+function tickStations(dt: number) {
+	for (const station of grid.stations.values()) {
+		if (station.peopleWaiting >= STATION_CAPACITY) {
+			station.spawnTimer = 0;
+			continue;
+		}
+		station.spawnTimer += dt;
+		while (
+			station.spawnTimer >= STATION_SPAWN_INTERVAL &&
+			station.peopleWaiting < STATION_CAPACITY
+		) {
+			station.spawnTimer -= STATION_SPAWN_INTERVAL;
+			station.peopleWaiting += 1;
+		}
+		if (station.peopleWaiting >= STATION_CAPACITY) station.spawnTimer = 0;
+	}
+}
+
 function loop() {
 	const now = performance.now();
 	const dt = Math.min((now - lastTime) / 1000, 0.1);
 	lastTime = now;
+
+	tickStations(dt);
+
 	for (const l of sim.locos) {
-		if (locoIsMoving(l)) {
-			const dist = l.throttle * dt;
-			const sign = l.reverser as 1 | -1;
-			step(l, dist, sign, l.routingTrail);
-			for (const w of l.wagons) {
-				if (!w.stopped) step(w, dist, sign, l.routingTrail);
-			}
-			pruneTrail(l);
+		if (l.boardingAt) {
+			tickBoarding(l, dt);
+			continue;
 		}
+		if (locoIsMoving(l)) {
+			let dist = l.throttle * dt;
+			const distToStop = distanceToNextStop(l, APPROACH_DIST + dist);
+			if (distToStop < Infinity) {
+				const factor = Math.max(0, Math.min(1, distToStop / APPROACH_DIST));
+				dist = Math.min(dist * factor, distToStop);
+			}
+			const sign = l.reverser as 1 | -1;
+			if (dist > 1e-9) {
+				step(l, dist, sign, l.routingTrail);
+				for (const w of l.wagons) {
+					if (!w.stopped) step(w, dist, sign, l.routingTrail);
+				}
+				pruneTrail(l);
+			}
+		}
+		maybeStartBoarding(l);
 	}
-	if (anyMoving()) {
+
+	if (shouldAnimate()) {
 		rafHandle = requestAnimationFrame(loop);
 	} else {
 		rafHandle = 0;
@@ -202,9 +388,15 @@ function loop() {
 }
 
 function startLoopIfNeeded() {
-	if (rafHandle !== 0 || !anyMoving()) return;
+	if (rafHandle !== 0 || !shouldAnimate()) return;
 	lastTime = performance.now();
 	rafHandle = requestAnimationFrame(loop);
+}
+
+// Public hook for callers that mutate world state (e.g., placing a station)
+// and need the rAF loop to wake up so spawn timers tick.
+export function kickSimulation() {
+	startLoopIfNeeded();
 }
 
 export function setReverser(id: number, r: Reverser) {
@@ -234,8 +426,7 @@ export function setThrottle(id: number, t: number) {
 export function addWagon(id: number) {
 	const loco = findLoco(id);
 	if (!loco) return;
-	const last: Vehicle =
-		loco.wagons.length > 0 ? loco.wagons[loco.wagons.length - 1] : loco;
+	const last: Vehicle = loco.wagons.length > 0 ? loco.wagons[loco.wagons.length - 1] : loco;
 	const probe: Vehicle = {
 		x: last.x,
 		y: last.y,

@@ -6,7 +6,7 @@
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import type { PieceKind } from '$lib/railway/types';
 
-	let tool: PieceKind | 'loco' | 'erase' | 'draw' = $state('draw');
+	let tool: PieceKind | 'loco' | 'erase' | 'draw' | 'station' = $state('draw');
 	let view: '2d' | '3d' = $state('2d');
 </script>
 

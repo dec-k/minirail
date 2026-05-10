@@ -57,6 +57,18 @@ export type Loco = Vehicle & {
 	throttle: number;
 	wagons: Wagon[];
 	routingTrail: RoutingDecision[];
+	passengers: number;
+	// cellKey of the station the loco is currently boarding at, or null.
+	boardingAt: string | null;
+	// Seconds since the last boarding tick fired.
+	boardingTimer: number;
+};
+
+export type Station = {
+	// Number of people currently waiting on the platform.
+	peopleWaiting: number;
+	// Seconds since the last person spawned at this station.
+	spawnTimer: number;
 };
 
 export const cellKey = (x: number, y: number) => `${x},${y}`;

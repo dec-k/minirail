@@ -57,6 +57,10 @@ export function getStation(x: number, y: number): Station | undefined {
 
 // Add or remove a station at (x, y). A station only exists alongside a track
 // piece — placing on an empty cell is a no-op.
+//
+// The value is wrapped in $state(...) so that field mutations
+// (peopleWaiting, spawnTimer) trigger reactive updates. SvelteMap itself only
+// tracks add/delete/clear, not deep mutations on stored values.
 export function toggleStationAt(x: number, y: number) {
 	const k = cellKey(x, y);
 	if (grid.stations.has(k)) {
@@ -64,7 +68,8 @@ export function toggleStationAt(x: number, y: number) {
 		return;
 	}
 	if (!grid.cells.has(k)) return;
-	grid.stations.set(k, { peopleWaiting: 0, spawnTimer: 0 });
+	const station: Station = $state({ peopleWaiting: 0, spawnTimer: 0 });
+	grid.stations.set(k, station);
 }
 
 // Place a piece that carries the path {from, to} through (x, y). If the cell

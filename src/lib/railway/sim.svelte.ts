@@ -332,7 +332,14 @@ function tickBoarding(l: Loco, dt: number) {
 }
 
 function tickStations(dt: number) {
-	for (const station of grid.stations.values()) {
+	// Stations actively servicing a train don't accumulate new arrivals — their
+	// spawn timer freezes for the duration of (un)loading and resumes on depart.
+	const beingBoarded = new Set<string>();
+	for (const l of sim.locos) {
+		if (l.boardingAt) beingBoarded.add(l.boardingAt);
+	}
+	for (const [k, station] of grid.stations) {
+		if (beingBoarded.has(k)) continue;
 		if (station.peopleWaiting >= STATION_CAPACITY) {
 			station.spawnTimer = 0;
 			continue;

@@ -288,6 +288,105 @@ function distanceToNextStop(loco: Loco, maxDist: number): number {
 	return Infinity;
 }
 
+// Read-only walk forward along the loco's intended route. Returns the distance
+// (in tile units) from this train's leading vehicle (loco when going forward,
+// rear wagon when reversing) to the nearest point occupied by some other
+// train's loco or wagon, or +Infinity if none within `maxDist`.
+//
+// Two vehicles count as colliding when they share the same tile AND the same
+// pathIdx; vehicles on a different pathIdx of the same switch tile are on a
+// physically separate branch and don't block. Mirrors `step`'s routing
+// decisions so the brake point lines up with where the loco will actually go.
+function distanceToNextVehicle(loco: Loco, maxDist: number): number {
+	if (loco.reverser === 0) return Infinity;
+	const motionSign = loco.reverser as 1 | -1;
+	// When reversing, the loco pushes the wagons — the rearmost wagon leads.
+	const leader: Vehicle =
+		motionSign === -1 && loco.wagons.length > 0
+			? loco.wagons[loco.wagons.length - 1]
+			: loco;
+	const own = new Set<Vehicle>([loco, ...loco.wagons]);
+	let x = leader.x;
+	let y = leader.y;
+	let pathIdx = leader.pathIdx;
+	let t = leader.t;
+	let dir = leader.dir;
+	let cursor = leader.routingCursor;
+	let dist = 0;
+	let safety = 64;
+	while (dist <= maxDist && safety-- > 0) {
+		const piece = getPiece(x, y);
+		if (!piece) return Infinity;
+		const paths = pathsOf(piece);
+		const path = paths[pathIdx];
+		const pl = pathLength(path);
+		const effDir = (dir * motionSign) as 1 | -1;
+		let nearest = Infinity;
+		for (const other of sim.locos) {
+			const vs: Vehicle[] = [other, ...other.wagons];
+			for (const v of vs) {
+				if (own.has(v)) continue;
+				if (v.x !== x || v.y !== y || v.pathIdx !== pathIdx) continue;
+				let segDist: number;
+				if (effDir === 1) {
+					if (v.t < t - 1e-9) continue;
+					segDist = (v.t - t) * pl;
+				} else {
+					if (v.t > t + 1e-9) continue;
+					segDist = (t - v.t) * pl;
+				}
+				if (segDist < nearest) nearest = segDist;
+			}
+		}
+		if (nearest < Infinity) return dist + nearest;
+		const remainingT = effDir === 1 ? 1 - t : t;
+		const remainingDist = remainingT * pl;
+		dist += remainingDist;
+		if (dist > maxDist) return Infinity;
+		const exitDir = effDir === 1 ? path.to : path.from;
+		const nx = x + dx[exitDir];
+		const ny = y + dy[exitDir];
+		const entryDir = opposite(exitDir);
+		const nextPiece = getPiece(nx, ny);
+		if (!nextPiece) return Infinity;
+		const nextPaths = pathsOf(nextPiece);
+		const candidates: { idx: number; entry: 'from' | 'to' }[] = [];
+		for (let i = 0; i < nextPaths.length; i++) {
+			if (nextPaths[i].from === entryDir) candidates.push({ idx: i, entry: 'from' });
+			else if (nextPaths[i].to === entryDir) candidates.push({ idx: i, entry: 'to' });
+		}
+		if (candidates.length === 0) return Infinity;
+		let chosen = candidates[0];
+		if (candidates.length > 1) {
+			const tk = cellKey(nx, ny);
+			let matched: { idx: number; entry: 'from' | 'to' } | null = null;
+			for (let k = cursor; k < loco.routingTrail.length; k++) {
+				const r = loco.routingTrail[k];
+				if (r.tileKey === tk && r.entryPort === entryDir) {
+					const c = candidates.find((cn) => cn.idx === r.pathIdx);
+					if (c) {
+						matched = c;
+						cursor = k + 1;
+						break;
+					}
+				}
+			}
+			if (matched) chosen = matched;
+			else {
+				const active = nextPiece.active ?? 0;
+				chosen = candidates.find((c) => c.idx === active) ?? candidates[0];
+			}
+		}
+		x = nx;
+		y = ny;
+		pathIdx = chosen.idx;
+		const newEff = (chosen.entry === 'from' ? 1 : -1) as 1 | -1;
+		dir = (newEff * motionSign) as 1 | -1;
+		t = chosen.entry === 'from' ? 0 : 1;
+	}
+	return Infinity;
+}
+
 // True if stopping the loco at `stationKey` would actually do something —
 // either let a passenger off (one whose origin is somewhere else) or board a
 // new person (station has people AND the train has free wagon capacity).
@@ -390,9 +489,13 @@ function loop() {
 		if (locoIsMoving(l)) {
 			let dist = l.throttle * dt;
 			const distToStop = distanceToNextStop(l, APPROACH_DIST + dist);
-			if (distToStop < Infinity) {
-				const factor = Math.max(0, Math.min(1, distToStop / APPROACH_DIST));
-				dist = Math.min(dist * factor, distToStop);
+			const distToVehicleRaw = distanceToNextVehicle(l, APPROACH_DIST + WAGON_LENGTH + dist);
+			const distToVehicle =
+				distToVehicleRaw === Infinity ? Infinity : Math.max(0, distToVehicleRaw - WAGON_LENGTH);
+			const distToObstacle = Math.min(distToStop, distToVehicle);
+			if (distToObstacle < Infinity) {
+				const factor = Math.max(0, Math.min(1, distToObstacle / APPROACH_DIST));
+				dist = Math.min(dist * factor, distToObstacle);
 			}
 			const sign = l.reverser as 1 | -1;
 			if (dist > 1e-9) {

@@ -19,9 +19,9 @@
 				<h1
 					class="bg-linear-to-br from-foreground to-foreground/60 bg-clip-text font-display text-4xl tracking-tight text-transparent"
 				>
-					Mini Rail
+					Minirail
 				</h1>
-				<span class="text-sm font-medium text-muted-foreground"> a tiny railway sandbox </span>
+				<span class="text-sm font-medium text-muted-foreground"> a little railway sandbox, by dec. </span>
 			</div>
 
 			<div class="flex items-center gap-2">
@@ -39,10 +39,11 @@
 		</header>
 
 		<p class="max-w-prose text-sm leading-relaxed text-muted-foreground">
-			Use <span class="font-medium text-foreground">Draw</span> to drag a continuous path — pieces
-			are chosen automatically; dragging through an existing track creates a switch. Or pick a
-			specific piece and click cells; click a piece of the same kind again to rotate it.
-			<span class="font-medium text-foreground">Shift+click</span> a switch to throw it.
+		    Create a track using the toolbar, the place a <span class="font-medium text-foreground">Locomotive</span>.
+			Set the reverser to forward, engage the throttle, and off you go!
+		</p>
+		<p class="max-w-prose text-sm leading-relaxed text-muted-foreground">
+		    Switches are thrown by <kbd>Shift + LMB</kbd> on the point. The Draw tool can also create switches by dragging onto the side of an existing track!
 		</p>
 
 		<Toolbar bind:tool />

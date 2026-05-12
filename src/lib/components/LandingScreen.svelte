@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Card } from '$lib/components/ui/card';
-	import { Sparkles, Upload, FolderOpen, Trash2, X, Check } from 'lucide-svelte';
+	import { Upload, FolderOpen, Trash2, X, Check, TrainTrack } from 'lucide-svelte';
 	import {
 		listLocalSaves,
 		loadLocal,
@@ -96,7 +96,7 @@
 			>
 				Minirail
 			</h1>
-			<p class="text-base text-muted-foreground">a little railway sandbox, by dec.</p>
+			<p class="text-base text-muted-foreground">a super-simple railway sandbox</p>
 		</header>
 
 		<div class="flex flex-col gap-3 text-sm leading-relaxed text-muted-foreground">
@@ -115,13 +115,13 @@
 		</div>
 
 		<div class="flex flex-col gap-3 sm:flex-row">
-			<Button size="lg" class="flex-1" onclick={startNew}>
-				<Sparkles />
-				New Railway
+			<Button size="lg" class="flex-1 font-bold bg-gradient-to-r from-blue-500 to-purple-500 text-white" onclick={startNew}>
+				<TrainTrack />
+				Create a Track
 			</Button>
 			<Button variant="outline" size="lg" class="flex-1" onclick={() => fileInput?.click()}>
 				<Upload />
-				Load Railway
+				Load from File...
 			</Button>
 			<input
 				type="file"
@@ -152,7 +152,7 @@
 		{#if entries.length > 0}
 			<Card class="p-4">
 				<div class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-					Recent
+					Local Saves
 				</div>
 				<div class="flex flex-col gap-1.5">
 					{#each entries as entry (entry.name)}

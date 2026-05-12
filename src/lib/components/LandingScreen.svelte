@@ -115,11 +115,11 @@
 		</div>
 
 		<div class="flex flex-col gap-3 sm:flex-row">
-			<Button size="lg" class="flex-1 font-bold bg-linear-to-r from-blue-500 to-purple-500 text-white" onclick={startNew}>
+			<Button size="lg" class="font-bold sm:flex-1 bg-linear-to-r from-blue-500 to-purple-500 text-white" onclick={startNew}>
 				<TrainTrack />
 				Create a Track
 			</Button>
-			<Button variant="outline" size="lg" class="flex-1" onclick={() => fileInput?.click()}>
+			<Button variant="outline" size="lg" class="sm:flex-1" onclick={() => fileInput?.click()}>
 				<Upload />
 				Load from File...
 			</Button>

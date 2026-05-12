@@ -179,26 +179,6 @@
 					Save
 				</Button>
 			</div>
-			<div class="flex flex-wrap items-center gap-2">
-				<Button
-					variant="outline"
-					size="sm"
-					onclick={handleDownloadCurrent}
-					title="Download current layout as JSON"
-				>
-					<Download />
-					Download
-				</Button>
-				<Button
-					variant="outline"
-					size="sm"
-					onclick={handleCopyCurrent}
-					title="Copy current layout JSON to clipboard"
-				>
-					<Copy />
-					Copy JSON
-				</Button>
-			</div>
 		</div>
 
 		<Separator class="my-3" />

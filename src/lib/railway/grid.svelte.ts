@@ -31,6 +31,21 @@ export function placePiece(x: number, y: number, kind: PieceKind, rotation: Rota
 	grid.cells.set(cellKey(x, y), newPiece(kind, rotation));
 }
 
+// Restore a fully-formed piece (preserves switch `active` state). Used by the
+// save/load system when applying a saved layout.
+export function setPiece(x: number, y: number, piece: Piece) {
+	grid.cells.set(cellKey(x, y), { ...piece });
+}
+
+// Restore a station at a cell that already contains track. No-op if the cell
+// is empty. Used when applying a saved layout.
+export function setStation(x: number, y: number) {
+	const k = cellKey(x, y);
+	if (!grid.cells.has(k)) return;
+	const station: Station = $state({ peopleWaiting: 0, spawnTimer: 0 });
+	grid.stations.set(k, station);
+}
+
 export function rotateAt(x: number, y: number) {
 	const p = grid.cells.get(cellKey(x, y));
 	if (p) grid.cells.set(cellKey(x, y), rotatePiece(p));

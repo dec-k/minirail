@@ -115,7 +115,7 @@
 		</div>
 
 		<div class="flex flex-col gap-3 sm:flex-row">
-			<Button size="lg" class="flex-1 font-bold bg-gradient-to-r from-blue-500 to-purple-500 text-white" onclick={startNew}>
+			<Button size="lg" class="flex-1 font-bold bg-linear-to-r from-blue-500 to-purple-500 text-white" onclick={startNew}>
 				<TrainTrack />
 				Create a Track
 			</Button>

@@ -83,6 +83,52 @@ export function clearAllLocos() {
 	// loop() self-cancels via shouldAnimate().
 }
 
+export type SavedLocoState = {
+	x: number;
+	y: number;
+	pathIdx: number;
+	t: number;
+	dir: 1 | -1;
+	color: string;
+	wagons: number;
+};
+
+// Replace the entire loco list with the given saved states. Used by the
+// save/load system. Wagons are recreated via the normal addWagon walk so they
+// land in physically valid positions for the current track.
+export function replaceLocos(saved: SavedLocoState[]) {
+	sim.locos.length = 0;
+	nextLocoId = 1;
+	for (const s of saved) {
+		const piece = getPiece(s.x, s.y);
+		if (!piece) continue;
+		const paths = pathsOf(piece);
+		if (s.pathIdx < 0 || s.pathIdx >= paths.length) continue;
+		const loco: Loco = {
+			id: nextLocoId++,
+			color: s.color,
+			x: s.x,
+			y: s.y,
+			pathIdx: s.pathIdx,
+			t: s.t,
+			dir: s.dir,
+			stopped: false,
+			reverser: 0,
+			throttle: 0,
+			routingCursor: 0,
+			wagons: [],
+			routingTrail: [],
+			passengers: [],
+			boardingAt: null,
+			boardingTimer: 0,
+			lastBoardedAt: null
+		};
+		sim.locos.push(loco);
+		for (let i = 0; i < s.wagons; i++) addWagon(loco.id);
+	}
+	startLoopIfNeeded();
+}
+
 // Walk a vehicle along the track by `distance`, advancing in v.dir * motionSign.
 // motionSign +1 = head-first (forward), -1 = rear-first (reverse).
 //
@@ -302,9 +348,7 @@ function distanceToNextVehicle(loco: Loco, maxDist: number): number {
 	const motionSign = loco.reverser as 1 | -1;
 	// When reversing, the loco pushes the wagons — the rearmost wagon leads.
 	const leader: Vehicle =
-		motionSign === -1 && loco.wagons.length > 0
-			? loco.wagons[loco.wagons.length - 1]
-			: loco;
+		motionSign === -1 && loco.wagons.length > 0 ? loco.wagons[loco.wagons.length - 1] : loco;
 	const own = new Set<Vehicle>([loco, ...loco.wagons]);
 	let x = leader.x;
 	let y = leader.y;

@@ -2,6 +2,7 @@
 	import Board from '$lib/components/Board.svelte';
 	import Board3D from '$lib/components/Board3D.svelte';
 	import Toolbar from '$lib/components/Toolbar.svelte';
+	import SavesPanel from '$lib/components/SavesPanel.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import type { PieceKind } from '$lib/railway/types';
@@ -21,7 +22,9 @@
 				>
 					Minirail
 				</h1>
-				<span class="text-sm font-medium text-muted-foreground"> a little railway sandbox, by dec. </span>
+				<span class="text-sm font-medium text-muted-foreground">
+					a little railway sandbox, by dec.
+				</span>
 			</div>
 
 			<div class="flex items-center gap-2">
@@ -39,14 +42,18 @@
 		</header>
 
 		<p class="max-w-prose text-sm leading-relaxed text-muted-foreground">
-		    Create a track using the toolbar, the place a <span class="font-medium text-foreground">Locomotive</span>.
-			Set the reverser to forward, engage the throttle, and off you go!
+			Create a track using the toolbar, the place a <span class="font-medium text-foreground"
+				>Locomotive</span
+			>. Set the reverser to forward, engage the throttle, and off you go!
 		</p>
 		<p class="max-w-prose text-sm leading-relaxed text-muted-foreground">
-		    Switches are thrown by <kbd>Shift + LMB</kbd> on the point. The Draw tool can also create switches by dragging onto the side of an existing track!
+			Switches are thrown by <kbd>Shift + LMB</kbd> on the point. The Draw tool can also create switches
+			by dragging onto the side of an existing track!
 		</p>
 
 		<Toolbar bind:tool />
+
+		<SavesPanel />
 
 		<div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
 			{#if view === '2d'}

@@ -9,12 +9,19 @@
 		rotateAt,
 		removeAt,
 		toggleAt,
-		toggleStationAt
+		toggleStationAt,
+		cycleStationColorAt
 	} from '$lib/railway/grid.svelte';
 	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { sample, isStraight } from '$lib/railway/geometry';
-	import { isSwitch, cellKey, type PieceKind, type TilePath } from '$lib/railway/types';
+	import {
+		isSwitch,
+		cellKey,
+		STATION_PALETTE,
+		type PieceKind,
+		type TilePath
+	} from '$lib/railway/types';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station';
 	let { tool }: { tool: Tool } = $props();
@@ -163,6 +170,12 @@
 		const { x, y } = cell;
 		const existing = getPiece(x, y);
 		if (ev.shiftKey) {
+			// Station colour cycle takes priority over switch toggle when both
+			// coexist on the same tile.
+			if (grid.stations.has(cellKey(x, y))) {
+				cycleStationColorAt(x, y);
+				return;
+			}
 			if (existing && isSwitch(existing.kind)) toggleAt(x, y);
 			return;
 		}
@@ -250,10 +263,15 @@
 		<!-- Stations -->
 		{#each stationEntries as { x, y, station } (`station-${cellKey(x, y)}`)}
 			{@const hasPeople = station.peopleWaiting > 0}
+			{@const swatch = STATION_PALETTE[station.color]}
 			<T.Group position={[x + 0.5, 0.05, y + 0.5]}>
 				<T.Mesh position={[0, 0.04, -0.4]}>
 					<T.BoxGeometry args={[0.9, 0.08, 0.18]} />
-					<T.MeshStandardMaterial color={hasPeople ? '#f59e0b' : '#94a3b8'} />
+					<T.MeshStandardMaterial
+						color={swatch.fill}
+						opacity={hasPeople ? 1 : 0.7}
+						transparent={!hasPeople}
+					/>
 				</T.Mesh>
 				{#each [...Array(Math.min(station.peopleWaiting, 10)).keys()] as i (i)}
 					<T.Mesh position={[-0.36 + i * 0.08, 0.16, -0.4]}>

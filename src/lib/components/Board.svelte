@@ -7,12 +7,21 @@
 		removeAt,
 		toggleAt,
 		drawPath,
-		toggleStationAt
+		toggleStationAt,
+		cycleStationColorAt
 	} from '$lib/railway/grid.svelte';
 	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { svgPathD, sample } from '$lib/railway/geometry';
-	import { dx, dy, opposite, isSwitch, type Dir, type PieceKind } from '$lib/railway/types';
+	import {
+		dx,
+		dy,
+		opposite,
+		isSwitch,
+		STATION_PALETTE,
+		type Dir,
+		type PieceKind
+	} from '$lib/railway/types';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station';
 
@@ -194,6 +203,12 @@
 
 		const existing = getPiece(x, y);
 		if (e.shiftKey) {
+			// Station colour cycle takes priority over switch toggle when both
+			// coexist on the same tile.
+			if (grid.stations.has(`${x},${y}`)) {
+				cycleStationColorAt(x, y);
+				return;
+			}
 			if (existing && isSwitch(existing.kind)) toggleAt(x, y);
 			return;
 		}
@@ -292,6 +307,7 @@
 
 	{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
 		{@const hasPeople = station.peopleWaiting > 0}
+		{@const swatch = STATION_PALETTE[station.color]}
 		<g transform="translate({x * TILE} {y * TILE})">
 			<rect
 				x={TILE * 0.08}
@@ -299,9 +315,9 @@
 				width={TILE * 0.84}
 				height={TILE * 0.28}
 				rx={TILE * 0.06}
-				fill={hasPeople ? '#f59e0b' : '#94a3b8'}
-				fill-opacity="0.92"
-				stroke={hasPeople ? '#92400e' : '#475569'}
+				fill={swatch.fill}
+				fill-opacity={hasPeople ? 0.92 : 0.6}
+				stroke={swatch.stroke}
 				stroke-width="1.5"
 			/>
 			<text

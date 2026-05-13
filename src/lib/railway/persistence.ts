@@ -1,7 +1,14 @@
 import { browser } from '$app/environment';
 import { grid, clearAll, resize, setPiece, setStation } from './grid.svelte';
 import { sim, replaceLocos, clearAllLocos, type SavedLocoState } from './sim.svelte';
-import { isSwitch, type Piece, type PieceKind, type Rotation } from './types';
+import {
+	isSwitch,
+	STATION_COLOR_CYCLE,
+	type Piece,
+	type PieceKind,
+	type Rotation,
+	type StationColor
+} from './types';
 
 export const SCHEMA_VERSION = 1 as const;
 export const STORAGE_PREFIX = 'minirail:save:';
@@ -14,6 +21,14 @@ export type SavedCell = {
 	active?: 0 | 1;
 };
 
+export type SavedStation = {
+	x: number;
+	y: number;
+	// Optional for backward compatibility — pre-colour saves omit it and load
+	// back as 'gray' (the wildcard default).
+	color?: StationColor;
+};
+
 export type SavedLayout = {
 	version: typeof SCHEMA_VERSION;
 	name: string;
@@ -22,7 +37,7 @@ export type SavedLayout = {
 		width: number;
 		height: number;
 		cells: SavedCell[];
-		stations: { x: number; y: number }[];
+		stations: SavedStation[];
 	};
 	locos: SavedLocoState[];
 };
@@ -35,10 +50,12 @@ export function serializeLayout(name: string): SavedLayout {
 		if (isSwitch(piece.kind)) entry.active = (piece.active ?? 0) as 0 | 1;
 		cells.push(entry);
 	}
-	const stations: { x: number; y: number }[] = [];
-	for (const k of grid.stations.keys()) {
+	const stations: SavedStation[] = [];
+	for (const [k, station] of grid.stations) {
 		const [x, y] = k.split(',').map(Number);
-		stations.push({ x, y });
+		const entry: SavedStation = { x, y };
+		if (station.color !== 'gray') entry.color = station.color;
+		stations.push(entry);
 	}
 	const locos: SavedLocoState[] = sim.locos.map((l) => ({
 		x: l.x,
@@ -68,7 +85,7 @@ export function applyLayout(layout: SavedLayout) {
 			: { kind: c.kind, rotation: c.rotation };
 		setPiece(c.x, c.y, piece);
 	}
-	for (const s of layout.grid.stations) setStation(s.x, s.y);
+	for (const s of layout.grid.stations) setStation(s.x, s.y, s.color ?? 'gray');
 	replaceLocos(layout.locos);
 }
 
@@ -113,12 +130,16 @@ export function parseLayout(json: string): SavedLayout {
 		return out;
 	});
 	const rawStations = Array.isArray(g.stations) ? (g.stations as unknown[]) : [];
-	const stations = rawStations.map((s, i) => {
+	const stations: SavedStation[] = rawStations.map((s, i) => {
 		const ss = s as Record<string, unknown>;
 		if (typeof ss.x !== 'number' || typeof ss.y !== 'number') {
 			throw new Error(`Station ${i} is malformed.`);
 		}
-		return { x: ss.x, y: ss.y };
+		const out: SavedStation = { x: ss.x, y: ss.y };
+		if (typeof ss.color === 'string' && STATION_COLOR_CYCLE.includes(ss.color as StationColor)) {
+			out.color = ss.color as StationColor;
+		}
+		return out;
 	});
 	const rawLocos = Array.isArray(r.locos) ? (r.locos as unknown[]) : [];
 	const locos: SavedLocoState[] = rawLocos.map((l, i) => {

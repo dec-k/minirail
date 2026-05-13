@@ -72,11 +72,43 @@ export type Loco = Vehicle & {
 	lastBoardedAt: string | null;
 };
 
+// Station colours form a route line: a passenger boarded at a coloured station
+// is only delivered at another station of the same colour. `gray` is the
+// default and acts as a wildcard — it matches every colour, so a board made
+// entirely of grey stations behaves like the original "any-to-any" system.
+export type StationColor = 'gray' | 'red' | 'blue' | 'green' | 'yellow';
+
+// Cycle order used by the shift-click affordance. Starts on gray so the first
+// click moves you off the default.
+export const STATION_COLOR_CYCLE: StationColor[] = ['gray', 'red', 'blue', 'green', 'yellow'];
+
+export const STATION_PALETTE: Record<StationColor, { fill: string; stroke: string }> = {
+	gray: { fill: '#94a3b8', stroke: '#475569' },
+	red: { fill: '#dc2626', stroke: '#7f1d1d' },
+	blue: { fill: '#2563eb', stroke: '#1e3a8a' },
+	green: { fill: '#059669', stroke: '#064e3b' },
+	yellow: { fill: '#d97706', stroke: '#78350f' }
+};
+
+export function nextStationColor(c: StationColor): StationColor {
+	const i = STATION_COLOR_CYCLE.indexOf(c);
+	return STATION_COLOR_CYCLE[(i + 1) % STATION_COLOR_CYCLE.length];
+}
+
+// Wildcard match: gray on either side matches anything.
+export function stationColorsMatch(a: StationColor, b: StationColor): boolean {
+	if (a === 'gray' || b === 'gray') return true;
+	return a === b;
+}
+
 export type Station = {
 	// Number of people currently waiting on the platform.
 	peopleWaiting: number;
 	// Seconds since the last person spawned at this station.
 	spawnTimer: number;
+	// Route line. Passengers boarded here only disembark at another station of
+	// the same colour. `gray` is a wildcard (matches anything).
+	color: StationColor;
 };
 
 export const cellKey = (x: number, y: number) => `${x},${y}`;

@@ -1,11 +1,13 @@
 import { SvelteMap } from 'svelte/reactivity';
 import {
 	cellKey,
+	nextStationColor,
 	type Dir,
 	type Piece,
 	type PieceKind,
 	type Rotation,
-	type Station
+	type Station,
+	type StationColor
 } from './types';
 import {
 	newPiece,
@@ -39,10 +41,10 @@ export function setPiece(x: number, y: number, piece: Piece) {
 
 // Restore a station at a cell that already contains track. No-op if the cell
 // is empty. Used when applying a saved layout.
-export function setStation(x: number, y: number) {
+export function setStation(x: number, y: number, color: StationColor = 'gray') {
 	const k = cellKey(x, y);
 	if (!grid.cells.has(k)) return;
-	const station: Station = $state({ peopleWaiting: 0, spawnTimer: 0 });
+	const station: Station = $state({ peopleWaiting: 0, spawnTimer: 0, color });
 	grid.stations.set(k, station);
 }
 
@@ -83,8 +85,21 @@ export function toggleStationAt(x: number, y: number) {
 		return;
 	}
 	if (!grid.cells.has(k)) return;
-	const station: Station = $state({ peopleWaiting: 0, spawnTimer: 0 });
+	const station: Station = $state({ peopleWaiting: 0, spawnTimer: 0, color: 'gray' });
 	grid.stations.set(k, station);
+}
+
+// Advance a station's colour through STATION_COLOR_CYCLE. No-op on empty cells.
+export function cycleStationColorAt(x: number, y: number) {
+	const s = grid.stations.get(cellKey(x, y));
+	if (!s) return;
+	s.color = nextStationColor(s.color);
+}
+
+export function setStationColor(x: number, y: number, color: StationColor) {
+	const s = grid.stations.get(cellKey(x, y));
+	if (!s) return;
+	s.color = color;
 }
 
 // Place a piece that carries the path {from, to} through (x, y). If the cell

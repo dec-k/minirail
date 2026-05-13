@@ -4,6 +4,7 @@ import {
 	opposite,
 	cellKey,
 	LOCO_COLORS,
+	stationColorsMatch,
 	type Loco,
 	type Reverser,
 	type RoutingDecision,
@@ -432,14 +433,22 @@ function distanceToNextVehicle(loco: Loco, maxDist: number): number {
 }
 
 // True if stopping the loco at `stationKey` would actually do something —
-// either let a passenger off (one whose origin is somewhere else) or board a
-// new person (station has people AND the train has free wagon capacity).
+// either let a passenger off (one whose origin is somewhere else AND whose
+// origin colour matches this station's colour) or board a new person (station
+// has people AND the train has free wagon capacity). Gray-coloured stations
+// are wildcards on the matching side, so a layout of all-gray stations
+// behaves like the original any-to-any system.
 function shouldStopAt(loco: Loco, stationKey: string): boolean {
 	if (loco.wagons.length === 0) return false;
 	const station = grid.stations.get(stationKey);
 	if (!station) return false;
 	if (station.peopleWaiting > 0 && loco.passengers.length < loco.wagons.length) return true;
-	for (const origin of loco.passengers) if (origin !== stationKey) return true;
+	for (const origin of loco.passengers) {
+		if (origin === stationKey) continue;
+		const originStation = grid.stations.get(origin);
+		const originColor = originStation?.color ?? 'gray';
+		if (stationColorsMatch(originColor, station.color)) return true;
+	}
 	return false;
 }
 
@@ -471,8 +480,15 @@ function tickBoarding(l: Loco, dt: number) {
 			releaseBoarding(l);
 			return;
 		}
-		// Phase 1: dismount one passenger whose origin is not this station.
-		const foreignIdx = l.passengers.findIndex((origin) => origin !== stationKey);
+		// Phase 1: dismount one passenger whose origin is not this station AND
+		// whose origin colour matches this station's colour (gray is a wildcard
+		// on either side). Passengers whose colour doesn't match stay aboard.
+		const foreignIdx = l.passengers.findIndex((origin) => {
+			if (origin === stationKey) return false;
+			const originStation = grid.stations.get(origin);
+			const originColor = originStation?.color ?? 'gray';
+			return stationColorsMatch(originColor, station.color);
+		});
 		if (foreignIdx >= 0) {
 			l.passengers.splice(foreignIdx, 1);
 			continue;

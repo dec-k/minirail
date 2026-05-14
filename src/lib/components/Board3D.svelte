@@ -22,6 +22,7 @@
 		type PieceKind,
 		type TilePath
 	} from '$lib/railway/types';
+	import { stoneSpots, treeSpots } from '$lib/railway/decorations';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
 	let { tool, decorationKind }: { tool: Tool; decorationKind: DecorationKind } = $props();
@@ -211,6 +212,13 @@
 			return { x, y, decoration };
 		})
 	);
+
+	const groundOverEntries = $derived(
+		[...grid.groundOvers.entries()].map(([k, groundOver]) => {
+			const [x, y] = k.split(',').map(Number);
+			return { x, y, groundOver };
+		})
+	);
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -243,24 +251,43 @@
 			<T.LineBasicMaterial color={palette.gridLine} />
 		</T.LineSegments>
 
+		<!-- Groundovers (rendered under track) -->
+		{#each groundOverEntries as { x, y, groundOver } (`ground-${cellKey(x, y)}`)}
+			<T.Mesh position={[x + 0.5, 0.012, y + 0.5]} rotation={[-Math.PI / 2, 0, 0]}>
+				<T.PlaneGeometry args={[1, 1]} />
+				<T.MeshStandardMaterial color={groundOver.kind === 'grass' ? '#86efac' : '#d4d4d8'} />
+			</T.Mesh>
+			{#if groundOver.kind === 'stone'}
+				{#each stoneSpots(x, y) as spot, i (i)}
+					<T.Mesh position={[x + spot.cx, 0.025, y + spot.cy]}>
+						<T.SphereGeometry args={[spot.r * 0.7, 6, 4]} />
+						<T.MeshStandardMaterial color={spot.tone > 0.55 ? '#71717a' : '#a1a1aa'} />
+					</T.Mesh>
+				{/each}
+			{/if}
+		{/each}
+
 		<!-- Decorations -->
 		{#each decorationEntries as { x, y, decoration } (`deco-${cellKey(x, y)}`)}
 			{#if decoration.kind === 'water'}
-				<T.Mesh position={[x + 0.5, 0.02, y + 0.5]} rotation={[-Math.PI / 2, 0, 0]}>
-					<T.PlaneGeometry args={[0.96, 0.96]} />
+				<T.Mesh position={[x + 0.5, 0.022, y + 0.5]} rotation={[-Math.PI / 2, 0, 0]}>
+					<T.PlaneGeometry args={[1, 1]} />
 					<T.MeshStandardMaterial color="#3b82f6" />
 				</T.Mesh>
 			{:else if decoration.kind === 'tree'}
-				<T.Group position={[x + 0.5, 0, y + 0.5]}>
-					<T.Mesh position={[0, 0.1, 0]}>
-						<T.CylinderGeometry args={[0.04, 0.05, 0.2, 8]} />
+				{#each treeSpots(x, y) as t, i (i)}
+					{@const trunkH = 0.08}
+					{@const coneR = t.r * 0.6}
+					{@const coneH = t.r * 1.6}
+					<T.Mesh position={[x + t.cx, trunkH / 2, y + t.cy]}>
+						<T.CylinderGeometry args={[0.025, 0.03, trunkH, 6]} />
 						<T.MeshStandardMaterial color="#78350f" />
 					</T.Mesh>
-					<T.Mesh position={[0, 0.42, 0]}>
-						<T.ConeGeometry args={[0.28, 0.55, 12]} />
-						<T.MeshStandardMaterial color="#15803d" />
+					<T.Mesh position={[x + t.cx, trunkH + coneH / 2, y + t.cy]}>
+						<T.ConeGeometry args={[coneR, coneH, 8]} />
+						<T.MeshStandardMaterial color={t.tone > 0.5 ? '#15803d' : '#16a34a'} />
 					</T.Mesh>
-				</T.Group>
+				{/each}
 			{:else if decoration.kind === 'building'}
 				<T.Group position={[x + 0.5, 0, y + 0.5]}>
 					<T.Mesh position={[0, 0.25, 0]}>

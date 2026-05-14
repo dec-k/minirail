@@ -79,8 +79,11 @@ export type Station = {
 	spawnTimer: number;
 };
 
-export type DecorationKind = 'tree' | 'building' | 'water';
-export const DECORATION_KINDS: DecorationKind[] = ['tree', 'building', 'water'];
+export type DecorationKind = 'tree' | 'building' | 'water' | 'grass' | 'stone';
+export const DECORATION_KINDS: DecorationKind[] = ['tree', 'building', 'water', 'grass', 'stone'];
+// Groundover kinds can sit on cells that already contain track (they render
+// underneath); other decoration kinds require empty cells.
+export const isGroundOverKind = (k: DecorationKind): boolean => k === 'grass' || k === 'stone';
 export type Decoration = { kind: DecorationKind };
 
 export const cellKey = (x: number, y: number) => `${x},${y}`;

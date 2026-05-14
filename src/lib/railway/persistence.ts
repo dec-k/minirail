@@ -10,10 +10,10 @@ import {
 	type Rotation
 } from './types';
 
-export const SCHEMA_VERSION = 2 as const;
+export const SCHEMA_VERSION = 3 as const;
 // Older save versions we can still read. Each one needs an explicit upgrade
 // path in `parseLayout`.
-const SUPPORTED_VERSIONS = new Set([1, 2]);
+const SUPPORTED_VERSIONS = new Set([1, 2, 3]);
 export const STORAGE_PREFIX = 'minirail:save:';
 
 export type SavedCell = {
@@ -55,6 +55,12 @@ export function serializeLayout(name: string): SavedLayout {
 	}
 	const decorations: SavedDecoration[] = [];
 	for (const [k, deco] of grid.decorations) {
+		const [x, y] = k.split(',').map(Number);
+		decorations.push({ x, y, kind: deco.kind });
+	}
+	// Groundovers (grass/stone) live in a separate map at runtime but share the
+	// decorations array on disk — `setDecoration` routes by kind on apply.
+	for (const [k, deco] of grid.groundOvers) {
 		const [x, y] = k.split(',').map(Number);
 		decorations.push({ x, y, kind: deco.kind });
 	}

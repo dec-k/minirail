@@ -34,7 +34,9 @@
 		Trees,
 		TreePine,
 		Building,
-		Waves
+		Waves,
+		Sprout,
+		Mountain
 	} from 'lucide-svelte';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
@@ -60,7 +62,9 @@
 	const decorationOptions: { id: DecorationKind; label: string; icon: Icon }[] = [
 		{ id: 'tree', label: 'Tree', icon: TreePine },
 		{ id: 'building', label: 'Building', icon: Building },
-		{ id: 'water', label: 'Water', icon: Waves }
+		{ id: 'water', label: 'Water', icon: Waves },
+		{ id: 'grass', label: 'Grass', icon: Sprout },
+		{ id: 'stone', label: 'Stone', icon: Mountain }
 	];
 
 	const reverserOptions: { id: Reverser; label: string; icon: Icon }[] = [
@@ -122,7 +126,9 @@
 				{/each}
 			</ToggleGroup.Root>
 			<span class="text-xs text-muted-foreground">
-				Click an empty cell to place. Click again to remove.
+				{decorationKind === 'grass' || decorationKind === 'stone'
+					? 'Click any cell to place ground cover under track. Click again to remove.'
+					: 'Click an empty cell to place. Click again to remove.'}
 			</span>
 		</div>
 	{/if}

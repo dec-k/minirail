@@ -72,6 +72,8 @@
 		kind: 'loco' | 'wagon';
 		color: string;
 		occupied: boolean;
+		// Origin-station fill colour of the passenger this wagon is carrying.
+		passengerFill: string | null;
 		x: number;
 		z: number;
 		rotY: number;
@@ -96,17 +98,31 @@
 		for (const l of sim.locos) {
 			const lp = poseOf(l);
 			if (lp)
-				out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, occupied: false, ...lp });
+				out.push({
+					key: `loco-${l.id}`,
+					kind: 'loco',
+					color: l.color,
+					occupied: false,
+					passengerFill: null,
+					...lp
+				});
 			for (let i = 0; i < l.wagons.length; i++) {
 				const wp = poseOf(l.wagons[i]);
-				if (wp)
-					out.push({
-						key: `wagon-${l.id}-${i}`,
-						kind: 'wagon',
-						color: l.color,
-						occupied: i < l.passengers.length,
-						...wp
-					});
+				if (!wp) continue;
+				const occupied = i < l.passengers.length;
+				let passengerFill: string | null = null;
+				if (occupied) {
+					const originColor = grid.stations.get(l.passengers[i])?.color ?? 'gray';
+					passengerFill = STATION_PALETTE[originColor].fill;
+				}
+				out.push({
+					key: `wagon-${l.id}-${i}`,
+					kind: 'wagon',
+					color: l.color,
+					occupied,
+					passengerFill,
+					...wp
+				});
 			}
 		}
 		return out;
@@ -299,10 +315,10 @@
 						<T.BoxGeometry args={[0.5, 0.22, 0.28]} />
 						<T.MeshStandardMaterial color={pose.color} />
 					</T.Mesh>
-					{#if pose.occupied}
+					{#if pose.occupied && pose.passengerFill}
 						<T.Mesh position={[0, 0.16, 0]}>
 							<T.BoxGeometry args={[0.12, 0.12, 0.12]} />
-							<T.MeshStandardMaterial color="#fef3c7" />
+							<T.MeshStandardMaterial color={pose.passengerFill} />
 						</T.Mesh>
 					{/if}
 				{/if}

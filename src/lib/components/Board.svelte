@@ -44,6 +44,11 @@
 		kind: 'loco' | 'wagon';
 		color: string;
 		occupied: boolean;
+		// Fill/stroke of the passenger dot, when occupied. Sourced from the
+		// origin station's colour swatch so a wagon visibly carries the line it
+		// boarded on.
+		passengerFill: string | null;
+		passengerStroke: string | null;
 		x: number;
 		y: number;
 		heading: number;
@@ -67,17 +72,36 @@
 		for (const l of sim.locos) {
 			const lp = poseOf(l);
 			if (lp)
-				out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, occupied: false, ...lp });
+				out.push({
+					key: `loco-${l.id}`,
+					kind: 'loco',
+					color: l.color,
+					occupied: false,
+					passengerFill: null,
+					passengerStroke: null,
+					...lp
+				});
 			for (let i = 0; i < l.wagons.length; i++) {
 				const wp = poseOf(l.wagons[i]);
-				if (wp)
-					out.push({
-						key: `wagon-${l.id}-${i}`,
-						kind: 'wagon',
-						color: l.color,
-						occupied: i < l.passengers.length,
-						...wp
-					});
+				if (!wp) continue;
+				const occupied = i < l.passengers.length;
+				let passengerFill: string | null = null;
+				let passengerStroke: string | null = null;
+				if (occupied) {
+					const originColor = grid.stations.get(l.passengers[i])?.color ?? 'gray';
+					const swatch = STATION_PALETTE[originColor];
+					passengerFill = swatch.fill;
+					passengerStroke = swatch.stroke;
+				}
+				out.push({
+					key: `wagon-${l.id}-${i}`,
+					kind: 'wagon',
+					color: l.color,
+					occupied,
+					passengerFill,
+					passengerStroke,
+					...wp
+				});
 			}
 		}
 		return out;
@@ -366,13 +390,13 @@
 					stroke={darken(pose.color)}
 					stroke-width="1.5"
 				/>
-				{#if pose.occupied}
+				{#if pose.occupied && pose.passengerFill && pose.passengerStroke}
 					<circle
 						cx="0"
 						cy="0"
 						r={TILE * 0.08}
-						fill="#fef3c7"
-						stroke={darken(pose.color)}
+						fill={pose.passengerFill}
+						stroke={pose.passengerStroke}
 						stroke-width="1"
 					/>
 				{/if}

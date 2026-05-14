@@ -10,7 +10,7 @@
 		MAX_THROTTLE
 	} from '$lib/railway/sim.svelte';
 	import { clearAll } from '$lib/railway/grid.svelte';
-	import type { PieceKind, Reverser } from '$lib/railway/types';
+	import type { DecorationKind, PieceKind, Reverser } from '$lib/railway/types';
 	import { Button } from '$lib/components/ui/button';
 	import { Card } from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
@@ -30,13 +30,20 @@
 		X,
 		CornerDownRight,
 		CornerDownLeft,
-		Building2
+		Building2,
+		Trees,
+		TreePine,
+		Building,
+		Waves
 	} from 'lucide-svelte';
 
-	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
 	type Icon = typeof Pencil;
 
-	let { tool = $bindable() }: { tool: Tool } = $props();
+	let {
+		tool = $bindable(),
+		decorationKind = $bindable()
+	}: { tool: Tool; decorationKind: DecorationKind } = $props();
 
 	const tools: { id: Tool; label: string; icon: Icon }[] = [
 		{ id: 'draw', label: 'Draw', icon: Pencil },
@@ -46,7 +53,14 @@
 		{ id: 'switch-right', label: 'Switch R', icon: CornerDownRight },
 		{ id: 'loco', label: 'Locomotive', icon: TrainFront },
 		{ id: 'station', label: 'Station', icon: Building2 },
+		{ id: 'decorate', label: 'Decorate', icon: Trees },
 		{ id: 'erase', label: 'Erase', icon: Eraser }
+	];
+
+	const decorationOptions: { id: DecorationKind; label: string; icon: Icon }[] = [
+		{ id: 'tree', label: 'Tree', icon: TreePine },
+		{ id: 'building', label: 'Building', icon: Building },
+		{ id: 'water', label: 'Water', icon: Waves }
 	];
 
 	const reverserOptions: { id: Reverser; label: string; icon: Icon }[] = [
@@ -86,6 +100,32 @@
 			Clear board
 		</Button>
 	</div>
+
+	{#if tool === 'decorate'}
+		<div
+			class="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 py-2"
+		>
+			<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+				Scenery
+			</span>
+			<ToggleGroup.Root
+				type="single"
+				value={decorationKind}
+				onValueChange={(v) => v && (decorationKind = v as DecorationKind)}
+				aria-label="Select scenery kind"
+			>
+				{#each decorationOptions as d (d.id)}
+					<ToggleGroup.Item value={d.id} aria-label={d.label} title={d.label}>
+						<d.icon />
+						<span class="hidden sm:inline">{d.label}</span>
+					</ToggleGroup.Item>
+				{/each}
+			</ToggleGroup.Root>
+			<span class="text-xs text-muted-foreground">
+				Click an empty cell to place. Click again to remove.
+			</span>
+		</div>
+	{/if}
 
 	{#if sim.locos.length === 0}
 		<div

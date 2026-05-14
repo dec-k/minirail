@@ -9,15 +9,22 @@
 		rotateAt,
 		removeAt,
 		toggleAt,
-		toggleStationAt
+		toggleStationAt,
+		placeDecoration
 	} from '$lib/railway/grid.svelte';
 	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { sample, isStraight } from '$lib/railway/geometry';
-	import { isSwitch, cellKey, type PieceKind, type TilePath } from '$lib/railway/types';
+	import {
+		isSwitch,
+		cellKey,
+		type DecorationKind,
+		type PieceKind,
+		type TilePath
+	} from '$lib/railway/types';
 
-	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station';
-	let { tool }: { tool: Tool } = $props();
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
+	let { tool, decorationKind }: { tool: Tool; decorationKind: DecorationKind } = $props();
 
 	const TILE = 1;
 	const PX_PER_TILE = 56;
@@ -180,6 +187,10 @@
 			kickSimulation();
 			return;
 		}
+		if (tool === 'decorate') {
+			placeDecoration(x, y, decorationKind);
+			return;
+		}
 		if (existing && existing.kind === tool) {
 			rotateAt(x, y);
 		} else {
@@ -191,6 +202,13 @@
 		[...grid.stations.entries()].map(([k, station]) => {
 			const [x, y] = k.split(',').map(Number);
 			return { x, y, station };
+		})
+	);
+
+	const decorationEntries = $derived(
+		[...grid.decorations.entries()].map(([k, decoration]) => {
+			const [x, y] = k.split(',').map(Number);
+			return { x, y, decoration };
 		})
 	);
 </script>
@@ -224,6 +242,38 @@
 		<T.LineSegments geometry={gridLineGeom}>
 			<T.LineBasicMaterial color={palette.gridLine} />
 		</T.LineSegments>
+
+		<!-- Decorations -->
+		{#each decorationEntries as { x, y, decoration } (`deco-${cellKey(x, y)}`)}
+			{#if decoration.kind === 'water'}
+				<T.Mesh position={[x + 0.5, 0.02, y + 0.5]} rotation={[-Math.PI / 2, 0, 0]}>
+					<T.PlaneGeometry args={[0.96, 0.96]} />
+					<T.MeshStandardMaterial color="#3b82f6" />
+				</T.Mesh>
+			{:else if decoration.kind === 'tree'}
+				<T.Group position={[x + 0.5, 0, y + 0.5]}>
+					<T.Mesh position={[0, 0.1, 0]}>
+						<T.CylinderGeometry args={[0.04, 0.05, 0.2, 8]} />
+						<T.MeshStandardMaterial color="#78350f" />
+					</T.Mesh>
+					<T.Mesh position={[0, 0.42, 0]}>
+						<T.ConeGeometry args={[0.28, 0.55, 12]} />
+						<T.MeshStandardMaterial color="#15803d" />
+					</T.Mesh>
+				</T.Group>
+			{:else if decoration.kind === 'building'}
+				<T.Group position={[x + 0.5, 0, y + 0.5]}>
+					<T.Mesh position={[0, 0.25, 0]}>
+						<T.BoxGeometry args={[0.7, 0.5, 0.7]} />
+						<T.MeshStandardMaterial color="#9ca3af" />
+					</T.Mesh>
+					<T.Mesh position={[0, 0.6, 0]} rotation={[0, Math.PI / 4, 0]}>
+						<T.ConeGeometry args={[0.55, 0.25, 4]} />
+						<T.MeshStandardMaterial color="#6b7280" />
+					</T.Mesh>
+				</T.Group>
+			{/if}
+		{/each}
 
 		<!-- Tracks -->
 		{#each cellEntries as { x, y, piece } (cellKey(x, y))}

@@ -1,6 +1,8 @@
 import { SvelteMap } from 'svelte/reactivity';
 import {
 	cellKey,
+	type Decoration,
+	type DecorationKind,
 	type Dir,
 	type Piece,
 	type PieceKind,
@@ -20,7 +22,8 @@ export const grid = $state({
 	width: 20,
 	height: 15,
 	cells: new SvelteMap<string, Piece>(),
-	stations: new SvelteMap<string, Station>()
+	stations: new SvelteMap<string, Station>(),
+	decorations: new SvelteMap<string, Decoration>()
 });
 
 export function getPiece(x: number, y: number): Piece | undefined {
@@ -28,7 +31,9 @@ export function getPiece(x: number, y: number): Piece | undefined {
 }
 
 export function placePiece(x: number, y: number, kind: PieceKind, rotation: Rotation = 0) {
-	grid.cells.set(cellKey(x, y), newPiece(kind, rotation));
+	const k = cellKey(x, y);
+	grid.decorations.delete(k);
+	grid.cells.set(k, newPiece(kind, rotation));
 }
 
 // Restore a fully-formed piece (preserves switch `active` state). Used by the
@@ -59,11 +64,43 @@ export function toggleAt(x: number, y: number) {
 export function removeAt(x: number, y: number) {
 	grid.cells.delete(cellKey(x, y));
 	grid.stations.delete(cellKey(x, y));
+	grid.decorations.delete(cellKey(x, y));
 }
 
 export function clearAll() {
 	grid.cells.clear();
 	grid.stations.clear();
+	grid.decorations.clear();
+}
+
+export function getDecoration(x: number, y: number): Decoration | undefined {
+	return grid.decorations.get(cellKey(x, y));
+}
+
+// Place a decoration at (x, y). Decorations only live on cells that do not
+// contain track — placing on a track cell is a no-op. If the same kind is
+// already present, the decoration is removed (toggle). If a different kind is
+// present, it is replaced.
+export function placeDecoration(x: number, y: number, kind: DecorationKind) {
+	const k = cellKey(x, y);
+	if (grid.cells.has(k)) return;
+	const existing = grid.decorations.get(k);
+	if (existing && existing.kind === kind) {
+		grid.decorations.delete(k);
+		return;
+	}
+	grid.decorations.set(k, { kind });
+}
+
+// Restore a decoration unconditionally. Used by the save/load system.
+export function setDecoration(x: number, y: number, kind: DecorationKind) {
+	const k = cellKey(x, y);
+	if (grid.cells.has(k)) return;
+	grid.decorations.set(k, { kind });
+}
+
+export function removeDecorationAt(x: number, y: number) {
+	grid.decorations.delete(cellKey(x, y));
 }
 
 export function getStation(x: number, y: number): Station | undefined {
@@ -114,7 +151,9 @@ export function drawPath(x: number, y: number, from: Dir, to: Dir) {
 	}
 	const single = resolveSinglePathPiece(from, to);
 	if (single) {
-		grid.cells.set(cellKey(x, y), newPiece(single.kind, single.rotation));
+		const k = cellKey(x, y);
+		grid.decorations.delete(k);
+		grid.cells.set(k, newPiece(single.kind, single.rotation));
 	}
 }
 
@@ -126,6 +165,12 @@ export function resize(width: number, height: number) {
 		if (x < 0 || x >= width || y < 0 || y >= height) {
 			grid.cells.delete(k);
 			grid.stations.delete(k);
+		}
+	}
+	for (const k of grid.decorations.keys()) {
+		const [x, y] = k.split(',').map(Number);
+		if (x < 0 || x >= width || y < 0 || y >= height) {
+			grid.decorations.delete(k);
 		}
 	}
 }

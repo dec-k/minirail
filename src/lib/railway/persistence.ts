@@ -1,9 +1,19 @@
 import { browser } from '$app/environment';
-import { grid, clearAll, resize, setPiece, setStation } from './grid.svelte';
+import { grid, clearAll, resize, setPiece, setStation, setDecoration } from './grid.svelte';
 import { sim, replaceLocos, clearAllLocos, type SavedLocoState } from './sim.svelte';
-import { isSwitch, type Piece, type PieceKind, type Rotation } from './types';
+import {
+	DECORATION_KINDS,
+	isSwitch,
+	type DecorationKind,
+	type Piece,
+	type PieceKind,
+	type Rotation
+} from './types';
 
-export const SCHEMA_VERSION = 1 as const;
+export const SCHEMA_VERSION = 2 as const;
+// Older save versions we can still read. Each one needs an explicit upgrade
+// path in `parseLayout`.
+const SUPPORTED_VERSIONS = new Set([1, 2]);
 export const STORAGE_PREFIX = 'minirail:save:';
 
 export type SavedCell = {
@@ -14,6 +24,8 @@ export type SavedCell = {
 	active?: 0 | 1;
 };
 
+export type SavedDecoration = { x: number; y: number; kind: DecorationKind };
+
 export type SavedLayout = {
 	version: typeof SCHEMA_VERSION;
 	name: string;
@@ -23,6 +35,7 @@ export type SavedLayout = {
 		height: number;
 		cells: SavedCell[];
 		stations: { x: number; y: number }[];
+		decorations: SavedDecoration[];
 	};
 	locos: SavedLocoState[];
 };
@@ -40,6 +53,11 @@ export function serializeLayout(name: string): SavedLayout {
 		const [x, y] = k.split(',').map(Number);
 		stations.push({ x, y });
 	}
+	const decorations: SavedDecoration[] = [];
+	for (const [k, deco] of grid.decorations) {
+		const [x, y] = k.split(',').map(Number);
+		decorations.push({ x, y, kind: deco.kind });
+	}
 	const locos: SavedLocoState[] = sim.locos.map((l) => ({
 		x: l.x,
 		y: l.y,
@@ -53,7 +71,7 @@ export function serializeLayout(name: string): SavedLayout {
 		version: SCHEMA_VERSION,
 		name,
 		savedAt: Date.now(),
-		grid: { width: grid.width, height: grid.height, cells, stations },
+		grid: { width: grid.width, height: grid.height, cells, stations, decorations },
 		locos
 	};
 }
@@ -69,6 +87,7 @@ export function applyLayout(layout: SavedLayout) {
 		setPiece(c.x, c.y, piece);
 	}
 	for (const s of layout.grid.stations) setStation(s.x, s.y);
+	for (const d of layout.grid.decorations) setDecoration(d.x, d.y, d.kind);
 	replaceLocos(layout.locos);
 }
 
@@ -84,7 +103,7 @@ export function parseLayout(json: string): SavedLayout {
 	}
 	if (!raw || typeof raw !== 'object') throw new Error('Save file is empty or malformed.');
 	const r = raw as Record<string, unknown>;
-	if (r.version !== SCHEMA_VERSION) {
+	if (typeof r.version !== 'number' || !SUPPORTED_VERSIONS.has(r.version)) {
 		throw new Error(`Unsupported save version: ${String(r.version)}.`);
 	}
 	const name = typeof r.name === 'string' ? r.name : 'Imported layout';
@@ -120,6 +139,19 @@ export function parseLayout(json: string): SavedLayout {
 		}
 		return { x: ss.x, y: ss.y };
 	});
+	const rawDecorations = Array.isArray(g.decorations) ? (g.decorations as unknown[]) : [];
+	const decorations: SavedDecoration[] = rawDecorations.map((d, i) => {
+		const dd = d as Record<string, unknown>;
+		if (
+			typeof dd.x !== 'number' ||
+			typeof dd.y !== 'number' ||
+			typeof dd.kind !== 'string' ||
+			!DECORATION_KINDS.includes(dd.kind as DecorationKind)
+		) {
+			throw new Error(`Decoration ${i} is malformed.`);
+		}
+		return { x: dd.x, y: dd.y, kind: dd.kind as DecorationKind };
+	});
 	const rawLocos = Array.isArray(r.locos) ? (r.locos as unknown[]) : [];
 	const locos: SavedLocoState[] = rawLocos.map((l, i) => {
 		const ll = l as Record<string, unknown>;
@@ -148,7 +180,7 @@ export function parseLayout(json: string): SavedLayout {
 		version: SCHEMA_VERSION,
 		name,
 		savedAt,
-		grid: { width: g.width, height: g.height, cells, stations },
+		grid: { width: g.width, height: g.height, cells, stations, decorations },
 		locos
 	};
 }

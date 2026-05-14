@@ -7,16 +7,25 @@
 		removeAt,
 		toggleAt,
 		drawPath,
-		toggleStationAt
+		toggleStationAt,
+		placeDecoration
 	} from '$lib/railway/grid.svelte';
 	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { svgPathD, sample } from '$lib/railway/geometry';
-	import { dx, dy, opposite, isSwitch, type Dir, type PieceKind } from '$lib/railway/types';
+	import {
+		dx,
+		dy,
+		opposite,
+		isSwitch,
+		type DecorationKind,
+		type Dir,
+		type PieceKind
+	} from '$lib/railway/types';
 
-	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
 
-	let { tool }: { tool: Tool } = $props();
+	let { tool, decorationKind }: { tool: Tool; decorationKind: DecorationKind } = $props();
 
 	const TILE = 56;
 
@@ -211,6 +220,10 @@
 			kickSimulation();
 			return;
 		}
+		if (tool === 'decorate') {
+			placeDecoration(x, y, decorationKind);
+			return;
+		}
 		if (existing && existing.kind === tool) {
 			rotateAt(x, y);
 		} else {
@@ -222,6 +235,13 @@
 		[...grid.stations.entries()].map(([k, station]) => {
 			const [x, y] = k.split(',').map(Number);
 			return { x, y, station };
+		})
+	);
+
+	const decorationEntries = $derived(
+		[...grid.decorations.entries()].map(([k, decoration]) => {
+			const [x, y] = k.split(',').map(Number);
+			return { x, y, decoration };
 		})
 	);
 </script>
@@ -254,6 +274,59 @@
 	</defs>
 
 	<rect width={widthPx} height={heightPx} fill="url(#gridPattern)" />
+
+	{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
+		<g transform="translate({x * TILE} {y * TILE})">
+			{#if decoration.kind === 'water'}
+				<rect
+					x={TILE * 0.05}
+					y={TILE * 0.05}
+					width={TILE * 0.9}
+					height={TILE * 0.9}
+					rx={TILE * 0.08}
+					fill="#3b82f6"
+					fill-opacity="0.55"
+					stroke="#1d4ed8"
+					stroke-width="1.5"
+					stroke-opacity="0.6"
+				/>
+			{:else if decoration.kind === 'tree'}
+				<circle cx={TILE * 0.5} cy={TILE * 0.58} r={TILE * 0.32} fill="#15803d" />
+				<circle cx={TILE * 0.38} cy={TILE * 0.46} r={TILE * 0.18} fill="#22c55e" />
+				<rect
+					x={TILE * 0.46}
+					y={TILE * 0.7}
+					width={TILE * 0.08}
+					height={TILE * 0.16}
+					fill="#78350f"
+				/>
+			{:else if decoration.kind === 'building'}
+				<rect
+					x={TILE * 0.18}
+					y={TILE * 0.24}
+					width={TILE * 0.64}
+					height={TILE * 0.62}
+					fill="#9ca3af"
+					stroke="#374151"
+					stroke-width="1.5"
+				/>
+				<polygon
+					points="{TILE * 0.14},{TILE * 0.24} {TILE * 0.5},{TILE * 0.06} {TILE * 0.86},{TILE *
+						0.24}"
+					fill="#6b7280"
+					stroke="#374151"
+					stroke-width="1.5"
+				/>
+				<rect
+					x={TILE * 0.44}
+					y={TILE * 0.58}
+					width={TILE * 0.12}
+					height={TILE * 0.28}
+					fill="#374151"
+				/>
+			{/if}
+		</g>
+	{/each}
 
 	{#each cellEntries as { x, y, piece } (`${x},${y}`)}
 		{@const switchTile = isSwitch(piece.kind)}

@@ -6,9 +6,10 @@
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import LandingScreen from '$lib/components/LandingScreen.svelte';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
-	import type { PieceKind } from '$lib/railway/types';
+	import type { DecorationKind, PieceKind } from '$lib/railway/types';
 
-	let tool: PieceKind | 'loco' | 'erase' | 'draw' | 'station' = $state('draw');
+	let tool: PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' = $state('draw');
+	let decorationKind: DecorationKind = $state('tree');
 	let view: '2d' | '3d' = $state('2d');
 	let started = $state(false);
 </script>
@@ -42,13 +43,13 @@
 				</div>
 			</header>
 
-			<Toolbar bind:tool />
+			<Toolbar bind:tool bind:decorationKind />
 
 			<div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
 				{#if view === '2d'}
-					<Board {tool} />
+					<Board {tool} {decorationKind} />
 				{:else}
-					<Board3D {tool} />
+					<Board3D {tool} {decorationKind} />
 				{/if}
 			</div>
 		</div>

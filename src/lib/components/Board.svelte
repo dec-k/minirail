@@ -7,16 +7,27 @@
 		removeAt,
 		toggleAt,
 		drawPath,
-		toggleStationAt
+		toggleStationAt,
+		placeDecoration,
+		setDecoration
 	} from '$lib/railway/grid.svelte';
 	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { svgPathD, sample } from '$lib/railway/geometry';
-	import { dx, dy, opposite, isSwitch, type Dir, type PieceKind } from '$lib/railway/types';
+	import {
+		dx,
+		dy,
+		opposite,
+		isSwitch,
+		type DecorationKind,
+		type Dir,
+		type PieceKind
+	} from '$lib/railway/types';
+	import { grassTufts, stoneSpots, treeSpots } from '$lib/railway/decorations';
 
-	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
 
-	let { tool }: { tool: Tool } = $props();
+	let { tool, decorationKind }: { tool: Tool; decorationKind: DecorationKind } = $props();
 
 	const TILE = 56;
 
@@ -133,6 +144,18 @@
 	};
 	let draw: DrawState | null = null;
 
+	// Paint state for the decorate tool. A pointerup with `moved=false` toggles
+	// the start cell (same as a click); a drag paints every cell crossed using
+	// set semantics (never toggles off).
+	type PaintState = {
+		pointerId: number;
+		moved: boolean;
+		startCell: { x: number; y: number };
+		lastCell: { x: number; y: number };
+		kind: DecorationKind;
+	};
+	let paint: PaintState | null = null;
+
 	function stepDirToward(from: { x: number; y: number }, to: { x: number; y: number }): Dir {
 		const ddx = to.x - from.x;
 		const ddy = to.y - from.y;
@@ -155,35 +178,89 @@
 		}
 	}
 
+	function advancePaint(target: { x: number; y: number }) {
+		if (!paint) return;
+		let safety = 1000;
+		while (safety-- > 0) {
+			const last = paint.lastCell;
+			if (last.x === target.x && last.y === target.y) break;
+			const stepDir = stepDirToward(last, target);
+			const nx = last.x + dx[stepDir];
+			const ny = last.y + dy[stepDir];
+			setDecoration(nx, ny, paint.kind);
+			paint.lastCell = { x: nx, y: ny };
+			paint.moved = true;
+		}
+	}
+
 	function handlePointerDown(e: PointerEvent) {
-		if (tool !== 'draw') return;
 		if (e.button !== 0 || e.shiftKey) return;
 		const svg = e.currentTarget as SVGSVGElement;
 		const cell = cellFromEvent(e, svg);
 		if (!cell) return;
-		svg.setPointerCapture(e.pointerId);
-		draw = { pointerId: e.pointerId, moved: false, lastCell: cell, lastEntry: null };
-		e.preventDefault();
+		if (tool === 'draw') {
+			svg.setPointerCapture(e.pointerId);
+			draw = { pointerId: e.pointerId, moved: false, lastCell: cell, lastEntry: null };
+			e.preventDefault();
+			return;
+		}
+		if (tool === 'decorate') {
+			svg.setPointerCapture(e.pointerId);
+			paint = {
+				pointerId: e.pointerId,
+				moved: false,
+				startCell: cell,
+				lastCell: cell,
+				kind: decorationKind
+			};
+			e.preventDefault();
+			return;
+		}
 	}
 
 	function handlePointerMove(e: PointerEvent) {
-		if (!draw || e.pointerId !== draw.pointerId) return;
 		const svg = e.currentTarget as SVGSVGElement;
-		const cell = cellFromEvent(e, svg);
-		if (!cell) return;
-		advanceDraw(cell);
+		if (draw && e.pointerId === draw.pointerId) {
+			const cell = cellFromEvent(e, svg);
+			if (!cell) return;
+			advanceDraw(cell);
+			return;
+		}
+		if (paint && e.pointerId === paint.pointerId) {
+			const cell = cellFromEvent(e, svg);
+			if (!cell) return;
+			if (cell.x === paint.lastCell.x && cell.y === paint.lastCell.y) return;
+			// First movement confirms a drag — place the starting cell too so the
+			// painted line includes where the user pressed down.
+			if (!paint.moved) {
+				setDecoration(paint.startCell.x, paint.startCell.y, paint.kind);
+			}
+			advancePaint(cell);
+		}
 	}
 
 	function handlePointerUp(e: PointerEvent) {
-		if (!draw || e.pointerId !== draw.pointerId) return;
 		const svg = e.currentTarget as SVGSVGElement;
-		if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
-		// Stub the trailing cell as a straight extension if drawing made any progress.
-		if (draw.moved && draw.lastEntry !== null) {
-			const { x, y } = draw.lastCell;
-			drawPath(x, y, draw.lastEntry, opposite(draw.lastEntry));
+		if (draw && e.pointerId === draw.pointerId) {
+			if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+			// Stub the trailing cell as a straight extension if drawing made any progress.
+			if (draw.moved && draw.lastEntry !== null) {
+				const { x, y } = draw.lastCell;
+				drawPath(x, y, draw.lastEntry, opposite(draw.lastEntry));
+			}
+			draw = null;
+			return;
 		}
-		draw = null;
+		if (paint && e.pointerId === paint.pointerId) {
+			if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+			// A click without drag falls through to toggle semantics so the user
+			// can still single-click to remove a decoration of the same kind.
+			if (!paint.moved) {
+				placeDecoration(paint.startCell.x, paint.startCell.y, paint.kind);
+			}
+			paint = null;
+			return;
+		}
 	}
 
 	function handleClick(e: MouseEvent) {
@@ -198,6 +275,7 @@
 			return;
 		}
 		if (tool === 'draw') return; // pointerdown/up handles drawing
+		if (tool === 'decorate') return; // pointerdown/up handles paint + toggle
 		if (tool === 'erase') {
 			removeAt(x, y);
 			return;
@@ -222,6 +300,20 @@
 		[...grid.stations.entries()].map(([k, station]) => {
 			const [x, y] = k.split(',').map(Number);
 			return { x, y, station };
+		})
+	);
+
+	const decorationEntries = $derived(
+		[...grid.decorations.entries()].map(([k, decoration]) => {
+			const [x, y] = k.split(',').map(Number);
+			return { x, y, decoration };
+		})
+	);
+
+	const groundOverEntries = $derived(
+		[...grid.groundOvers.entries()].map(([k, groundOver]) => {
+			const [x, y] = k.split(',').map(Number);
+			return { x, y, groundOver };
 		})
 	);
 </script>
@@ -254,6 +346,89 @@
 	</defs>
 
 	<rect width={widthPx} height={heightPx} fill="url(#gridPattern)" />
+
+	{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
+		<g transform="translate({x * TILE} {y * TILE})">
+			{#if groundOver.kind === 'grass'}
+				<rect width={TILE} height={TILE} fill="#86efac" />
+				{#each grassTufts(x, y) as tuft, i (i)}
+					{@const cx = tuft.cx * TILE}
+					{@const cy = tuft.cy * TILE}
+					{@const blade = TILE * 0.07}
+					<path
+						d={`M ${cx - blade * 0.45} ${cy + blade * 0.5} L ${cx - blade * 0.55} ${cy - blade * 0.7} M ${cx} ${cy + blade * 0.5} L ${cx} ${cy - blade} M ${cx + blade * 0.45} ${cy + blade * 0.5} L ${cx + blade * 0.55} ${cy - blade * 0.7}`}
+						stroke={tuft.tone > 0.5 ? '#15803d' : '#16a34a'}
+						stroke-width={1.4}
+						stroke-linecap="round"
+						fill="none"
+					/>
+				{/each}
+			{:else if groundOver.kind === 'stone'}
+				<rect width={TILE} height={TILE} fill="#d4d4d8" />
+				{#each stoneSpots(x, y) as spot, i (i)}
+					<circle
+						cx={spot.cx * TILE}
+						cy={spot.cy * TILE}
+						r={spot.r * TILE}
+						fill={spot.tone > 0.55 ? '#71717a' : '#a1a1aa'}
+					/>
+				{/each}
+			{/if}
+		</g>
+	{/each}
+
+	{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
+		<g transform="translate({x * TILE} {y * TILE})">
+			{#if decoration.kind === 'water'}
+				<rect width={TILE} height={TILE} fill="#3b82f6" />
+			{:else if decoration.kind === 'tree'}
+				{#each treeSpots(x, y) as t, i (i)}
+					{@const tx = t.cx * TILE}
+					{@const ty = t.cy * TILE}
+					{@const tr = t.r * TILE}
+					<rect
+						x={tx - TILE * 0.025}
+						y={ty + tr * 0.4}
+						width={TILE * 0.05}
+						height={tr * 0.55}
+						fill="#78350f"
+					/>
+					<circle cx={tx} cy={ty} r={tr} fill={t.tone > 0.5 ? '#15803d' : '#16a34a'} />
+					<circle
+						cx={tx - tr * 0.3}
+						cy={ty - tr * 0.3}
+						r={tr * 0.55}
+						fill={t.tone > 0.5 ? '#22c55e' : '#4ade80'}
+						fill-opacity="0.85"
+					/>
+				{/each}
+			{:else if decoration.kind === 'building'}
+				<rect
+					x={TILE * 0.18}
+					y={TILE * 0.24}
+					width={TILE * 0.64}
+					height={TILE * 0.62}
+					fill="#9ca3af"
+					stroke="#374151"
+					stroke-width="1.5"
+				/>
+				<polygon
+					points="{TILE * 0.14},{TILE * 0.24} {TILE * 0.5},{TILE * 0.06} {TILE * 0.86},{TILE *
+						0.24}"
+					fill="#6b7280"
+					stroke="#374151"
+					stroke-width="1.5"
+				/>
+				<rect
+					x={TILE * 0.44}
+					y={TILE * 0.58}
+					width={TILE * 0.12}
+					height={TILE * 0.28}
+					fill="#374151"
+				/>
+			{/if}
+		</g>
+	{/each}
 
 	{#each cellEntries as { x, y, piece } (`${x},${y}`)}
 		{@const switchTile = isSwitch(piece.kind)}

@@ -1,6 +1,9 @@
 import { SvelteMap } from 'svelte/reactivity';
 import {
 	cellKey,
+	isGroundOverKind,
+	type Decoration,
+	type DecorationKind,
 	type Dir,
 	type Piece,
 	type PieceKind,
@@ -20,7 +23,13 @@ export const grid = $state({
 	width: 20,
 	height: 15,
 	cells: new SvelteMap<string, Piece>(),
-	stations: new SvelteMap<string, Station>()
+	stations: new SvelteMap<string, Station>(),
+	// Decorations that occupy empty cells exclusively (tree, building, water).
+	// Mutually exclusive with track at the same cell.
+	decorations: new SvelteMap<string, Decoration>(),
+	// Groundcover (grass, stone) that renders underneath track. May coexist with
+	// any cell contents.
+	groundOvers: new SvelteMap<string, Decoration>()
 });
 
 export function getPiece(x: number, y: number): Piece | undefined {
@@ -28,7 +37,9 @@ export function getPiece(x: number, y: number): Piece | undefined {
 }
 
 export function placePiece(x: number, y: number, kind: PieceKind, rotation: Rotation = 0) {
-	grid.cells.set(cellKey(x, y), newPiece(kind, rotation));
+	const k = cellKey(x, y);
+	grid.decorations.delete(k);
+	grid.cells.set(k, newPiece(kind, rotation));
 }
 
 // Restore a fully-formed piece (preserves switch `active` state). Used by the
@@ -57,13 +68,71 @@ export function toggleAt(x: number, y: number) {
 }
 
 export function removeAt(x: number, y: number) {
-	grid.cells.delete(cellKey(x, y));
-	grid.stations.delete(cellKey(x, y));
+	const k = cellKey(x, y);
+	grid.cells.delete(k);
+	grid.stations.delete(k);
+	grid.decorations.delete(k);
+	grid.groundOvers.delete(k);
 }
 
 export function clearAll() {
 	grid.cells.clear();
 	grid.stations.clear();
+	grid.decorations.clear();
+	grid.groundOvers.clear();
+}
+
+export function getDecoration(x: number, y: number): Decoration | undefined {
+	return grid.decorations.get(cellKey(x, y));
+}
+
+export function getGroundOver(x: number, y: number): Decoration | undefined {
+	return grid.groundOvers.get(cellKey(x, y));
+}
+
+// Place a decoration at (x, y). Tree/building/water can only live on cells
+// without track; grass/stone are groundovers that render under track and may
+// coexist with any cell contents. The two layers are independent — placing
+// grass on a tree-decorated cell adds grass under the tree.
+//
+// Toggle semantics apply within a layer: clicking the same kind that's already
+// in that layer removes it; a different kind in the same layer replaces it.
+export function placeDecoration(x: number, y: number, kind: DecorationKind) {
+	const k = cellKey(x, y);
+	if (isGroundOverKind(kind)) {
+		const existing = grid.groundOvers.get(k);
+		if (existing && existing.kind === kind) {
+			grid.groundOvers.delete(k);
+			return;
+		}
+		grid.groundOvers.set(k, { kind });
+		return;
+	}
+	if (grid.cells.has(k)) return;
+	const existing = grid.decorations.get(k);
+	if (existing && existing.kind === kind) {
+		grid.decorations.delete(k);
+		return;
+	}
+	grid.decorations.set(k, { kind });
+}
+
+// Restore a decoration unconditionally. Used by the save/load system; routes
+// to the correct layer based on kind.
+export function setDecoration(x: number, y: number, kind: DecorationKind) {
+	const k = cellKey(x, y);
+	if (isGroundOverKind(kind)) {
+		grid.groundOvers.set(k, { kind });
+		return;
+	}
+	if (grid.cells.has(k)) return;
+	grid.decorations.set(k, { kind });
+}
+
+export function removeDecorationAt(x: number, y: number) {
+	const k = cellKey(x, y);
+	grid.decorations.delete(k);
+	grid.groundOvers.delete(k);
 }
 
 export function getStation(x: number, y: number): Station | undefined {
@@ -114,7 +183,9 @@ export function drawPath(x: number, y: number, from: Dir, to: Dir) {
 	}
 	const single = resolveSinglePathPiece(from, to);
 	if (single) {
-		grid.cells.set(cellKey(x, y), newPiece(single.kind, single.rotation));
+		const k = cellKey(x, y);
+		grid.decorations.delete(k);
+		grid.cells.set(k, newPiece(single.kind, single.rotation));
 	}
 }
 
@@ -126,6 +197,18 @@ export function resize(width: number, height: number) {
 		if (x < 0 || x >= width || y < 0 || y >= height) {
 			grid.cells.delete(k);
 			grid.stations.delete(k);
+		}
+	}
+	for (const k of grid.decorations.keys()) {
+		const [x, y] = k.split(',').map(Number);
+		if (x < 0 || x >= width || y < 0 || y >= height) {
+			grid.decorations.delete(k);
+		}
+	}
+	for (const k of grid.groundOvers.keys()) {
+		const [x, y] = k.split(',').map(Number);
+		if (x < 0 || x >= width || y < 0 || y >= height) {
+			grid.groundOvers.delete(k);
 		}
 	}
 }

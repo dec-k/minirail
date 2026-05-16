@@ -9,7 +9,8 @@
 		drawPath,
 		toggleStationAt,
 		placeDecoration,
-		setDecoration
+		setDecoration,
+		getDecoration
 	} from '$lib/railway/grid.svelte';
 	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
@@ -24,7 +25,13 @@
 		type PieceKind,
 		type TilePath
 	} from '$lib/railway/types';
-	import { grassTufts, stoneSpots, treeSpots } from '$lib/railway/decorations';
+	import {
+		buildingSpots,
+		grassTufts,
+		stoneSpots,
+		treeSpots,
+		waveGlints
+	} from '$lib/railway/decorations';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
 
@@ -398,7 +405,67 @@
 	{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
 		<g transform="translate({x * TILE} {y * TILE})">
 			{#if decoration.kind === 'water'}
-				<rect width={TILE} height={TILE} fill="#3b82f6" />
+				{@const nN = getDecoration(x, y - 1)?.kind === 'water'}
+				{@const nE = getDecoration(x + 1, y)?.kind === 'water'}
+				{@const nS = getDecoration(x, y + 1)?.kind === 'water'}
+				{@const nW = getDecoration(x - 1, y)?.kind === 'water'}
+				<rect width={TILE} height={TILE} fill="#3a8fc7" />
+				{#each waveGlints(x, y) as g, i (i)}
+					<line
+						x1={(g.cx - g.len * 0.5) * TILE}
+						y1={g.cy * TILE}
+						x2={(g.cx + g.len * 0.5) * TILE}
+						y2={g.cy * TILE}
+						stroke="#ffffff"
+						stroke-opacity="0.3"
+						stroke-width={1.6}
+						stroke-linecap="round"
+					/>
+				{/each}
+				{#if !nN}
+					<line
+						x1={0}
+						y1={2}
+						x2={TILE}
+						y2={2}
+						stroke="#d9eef9"
+						stroke-opacity="0.9"
+						stroke-width={2.5}
+					/>
+				{/if}
+				{#if !nE}
+					<line
+						x1={TILE - 2}
+						y1={0}
+						x2={TILE - 2}
+						y2={TILE}
+						stroke="#d9eef9"
+						stroke-opacity="0.9"
+						stroke-width={2.5}
+					/>
+				{/if}
+				{#if !nS}
+					<line
+						x1={0}
+						y1={TILE - 2}
+						x2={TILE}
+						y2={TILE - 2}
+						stroke="#d9eef9"
+						stroke-opacity="0.9"
+						stroke-width={2.5}
+					/>
+				{/if}
+				{#if !nW}
+					<line
+						x1={2}
+						y1={0}
+						x2={2}
+						y2={TILE}
+						stroke="#d9eef9"
+						stroke-opacity="0.9"
+						stroke-width={2.5}
+					/>
+				{/if}
 			{:else if decoration.kind === 'tree'}
 				{#each treeSpots(x, y) as t, i (i)}
 					{@const tx = t.cx * TILE}
@@ -430,29 +497,52 @@
 					/>
 				{/each}
 			{:else if decoration.kind === 'building'}
-				<rect
-					x={TILE * 0.18}
-					y={TILE * 0.24}
-					width={TILE * 0.64}
-					height={TILE * 0.62}
-					fill="#9ca3af"
-					stroke="#374151"
-					stroke-width="1.5"
-				/>
-				<polygon
-					points="{TILE * 0.14},{TILE * 0.24} {TILE * 0.5},{TILE * 0.06} {TILE * 0.86},{TILE *
-						0.24}"
-					fill="#6b7280"
-					stroke="#374151"
-					stroke-width="1.5"
-				/>
-				<rect
-					x={TILE * 0.44}
-					y={TILE * 0.58}
-					width={TILE * 0.12}
-					height={TILE * 0.28}
-					fill="#374151"
-				/>
+				{#each buildingSpots(x, y) as h, i (i)}
+					{@const w = h.size * TILE}
+					{@const ht = h.size * TILE * 0.78}
+					{@const cx = h.cx * TILE}
+					{@const cy = h.cy * TILE}
+					{@const bodyTop = cy - ht * 0.4}
+					{@const bodyBot = cy + ht * 0.6}
+					{@const bodyLeft = cx - w * 0.5}
+					{@const bodyRight = cx + w * 0.5}
+					{@const roofPeak = bodyTop - w * 0.45}
+					{@const overhang = w * 0.08}
+					{@const body = h.tone > 0.5 ? '#f0dfc2' : '#e0cfae'}
+					{@const roof = h.roofTone < 0.34 ? '#a04d3a' : h.roofTone < 0.67 ? '#7a5535' : '#5a6072'}
+					<ellipse
+						{cx}
+						cy={bodyBot + w * 0.06}
+						rx={w * 0.58}
+						ry={w * 0.14}
+						fill="#000"
+						fill-opacity="0.18"
+					/>
+					<rect
+						x={bodyLeft}
+						y={bodyTop}
+						width={w}
+						height={bodyBot - bodyTop}
+						fill={body}
+						stroke="#3a2a1a"
+						stroke-width="1"
+					/>
+					<polygon
+						points="{bodyLeft - overhang},{bodyTop} {bodyRight +
+							overhang},{bodyTop} {cx},{roofPeak}"
+						fill={roof}
+						stroke="#3a2a1a"
+						stroke-width="1"
+						stroke-linejoin="round"
+					/>
+					<rect
+						x={cx - w * 0.09}
+						y={bodyBot - ht * 0.42}
+						width={w * 0.18}
+						height={ht * 0.42}
+						fill="#3a2a1a"
+					/>
+				{/each}
 			{/if}
 		</g>
 	{/each}

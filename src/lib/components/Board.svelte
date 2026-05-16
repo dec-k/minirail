@@ -21,7 +21,8 @@
 		isSwitch,
 		type DecorationKind,
 		type Dir,
-		type PieceKind
+		type PieceKind,
+		type TilePath
 	} from '$lib/railway/types';
 	import { grassTufts, stoneSpots, treeSpots } from '$lib/railway/decorations';
 
@@ -110,6 +111,23 @@
 		}
 		return out;
 	});
+
+	type SleeperTick = { cx: number; cy: number; nx: number; ny: number };
+
+	function sleeperTicks(path: TilePath, count: number, halfLen: number): SleeperTick[] {
+		const out: SleeperTick[] = [];
+		for (let i = 0; i < count; i++) {
+			const t = (i + 0.5) / count;
+			const s = sample(path, t);
+			out.push({
+				cx: s.x * TILE,
+				cy: s.y * TILE,
+				nx: -Math.sin(s.heading) * halfLen,
+				ny: Math.cos(s.heading) * halfLen
+			});
+		}
+		return out;
+	}
 
 	function darken(hex: string): string {
 		const m = /^#([0-9a-f]{6})$/i.exec(hex);
@@ -350,14 +368,14 @@
 	{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
 		<g transform="translate({x * TILE} {y * TILE})">
 			{#if groundOver.kind === 'grass'}
-				<rect width={TILE} height={TILE} fill="#86efac" />
+				<rect width={TILE} height={TILE} fill="#9dd07a" />
 				{#each grassTufts(x, y) as tuft, i (i)}
 					{@const cx = tuft.cx * TILE}
 					{@const cy = tuft.cy * TILE}
 					{@const blade = TILE * 0.07}
 					<path
 						d={`M ${cx - blade * 0.45} ${cy + blade * 0.5} L ${cx - blade * 0.55} ${cy - blade * 0.7} M ${cx} ${cy + blade * 0.5} L ${cx} ${cy - blade} M ${cx + blade * 0.45} ${cy + blade * 0.5} L ${cx + blade * 0.55} ${cy - blade * 0.7}`}
-						stroke={tuft.tone > 0.5 ? '#15803d' : '#16a34a'}
+						stroke={tuft.tone > 0.5 ? '#4f7a36' : '#5b8c3e'}
 						stroke-width={1.4}
 						stroke-linecap="round"
 						fill="none"
@@ -386,20 +404,29 @@
 					{@const tx = t.cx * TILE}
 					{@const ty = t.cy * TILE}
 					{@const tr = t.r * TILE}
+					<ellipse
+						cx={tx}
+						cy={ty + tr * 0.85}
+						rx={tr * 0.78}
+						ry={tr * 0.24}
+						fill="#000"
+						fill-opacity="0.18"
+					/>
 					<rect
 						x={tx - TILE * 0.025}
 						y={ty + tr * 0.4}
 						width={TILE * 0.05}
 						height={tr * 0.55}
-						fill="#78350f"
+						fill="#6b3a12"
 					/>
-					<circle cx={tx} cy={ty} r={tr} fill={t.tone > 0.5 ? '#15803d' : '#16a34a'} />
+					<circle cx={tx} cy={ty} r={tr} fill={t.tone > 0.5 ? '#3f6e2e' : '#467a35'} />
+					<circle cx={tx} cy={ty} r={tr * 0.94} fill={t.tone > 0.5 ? '#5b9d47' : '#67a652'} />
 					<circle
 						cx={tx - tr * 0.3}
 						cy={ty - tr * 0.3}
 						r={tr * 0.55}
-						fill={t.tone > 0.5 ? '#22c55e' : '#4ade80'}
-						fill-opacity="0.85"
+						fill={t.tone > 0.5 ? '#8fc56e' : '#a0d27e'}
+						fill-opacity="0.9"
 					/>
 				{/each}
 			{:else if decoration.kind === 'building'}
@@ -433,26 +460,48 @@
 	{#each cellEntries as { x, y, piece } (`${x},${y}`)}
 		{@const switchTile = isSwitch(piece.kind)}
 		{@const activeIdx = piece.active ?? 0}
+		{@const ordered = pathsOf(piece)
+			.map((p, i) => ({ p, i, inactive: switchTile && i !== activeIdx }))
+			.sort((a, b) => Number(b.inactive) - Number(a.inactive))}
 		<g transform="translate({x * TILE} {y * TILE})">
 			<rect width={TILE} height={TILE} class="fill-foreground/3" />
-			{#each pathsOf(piece) as path, i (i)}
-				{@const inactive = switchTile && i !== activeIdx}
+			{#each ordered as { p, i, inactive } (i)}
 				<path
-					d={svgPathD(path, TILE)}
+					d={svgPathD(p, TILE)}
 					fill="none"
-					class={inactive ? 'stroke-track-inactive opacity-70' : 'stroke-track-active'}
-					stroke-width={inactive ? Math.round(TILE * 0.1) : Math.round(TILE * 0.15)}
-					stroke-linecap="round"
+					stroke={inactive ? '#d6cdb8' : '#c8a878'}
+					stroke-width={Math.round(TILE * 0.46)}
+					stroke-linecap="butt"
+					opacity={inactive ? 0.65 : 1}
 				/>
-				{#if !inactive}
-					<path
-						d={svgPathD(path, TILE)}
-						fill="none"
-						class="stroke-track-rail"
-						stroke-width={Math.max(2, Math.round(TILE * 0.05))}
-						stroke-dasharray="4 4"
+				{#each sleeperTicks(p, 5, TILE * 0.21) as tick, k (k)}
+					<line
+						x1={tick.cx - tick.nx}
+						y1={tick.cy - tick.ny}
+						x2={tick.cx + tick.nx}
+						y2={tick.cy + tick.ny}
+						stroke={inactive ? '#9b8b6e' : '#5a3a1f'}
+						stroke-width={Math.max(2, Math.round(TILE * 0.07))}
+						stroke-linecap="round"
+						opacity={inactive ? 0.55 : 0.92}
 					/>
-				{/if}
+				{/each}
+				<path
+					d={svgPathD(p, TILE)}
+					fill="none"
+					class={inactive ? 'stroke-track-inactive' : 'stroke-track-active'}
+					stroke-width={Math.round(TILE * 0.22)}
+					stroke-linecap="butt"
+					opacity={inactive ? 0.6 : 1}
+				/>
+				<path
+					d={svgPathD(p, TILE)}
+					fill="none"
+					stroke={inactive ? '#d6cdb8' : '#c8a878'}
+					stroke-width={Math.round(TILE * 0.12)}
+					stroke-linecap="butt"
+					opacity={inactive ? 0.7 : 1}
+				/>
 			{/each}
 			{#if switchTile}
 				<circle

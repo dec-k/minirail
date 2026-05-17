@@ -67,6 +67,55 @@ export function stoneSpots(x: number, y: number): StoneSpot[] {
 	});
 }
 
+// Four mini-house positions per tile. Each tile of "building" decoration
+// renders as a small cluster (village) rather than one large structure. Jitter
+// keeps adjacent tiles from looking stamped; tone/roofTone drive per-house
+// colour variation.
+const BUILDING_SEEDS: { px: number; py: number; size: number; salt: number }[] = [
+	{ px: 0.27, py: 0.4, size: 0.26, salt: 41 },
+	{ px: 0.66, py: 0.32, size: 0.28, salt: 42 },
+	{ px: 0.3, py: 0.74, size: 0.24, salt: 43 },
+	{ px: 0.7, py: 0.7, size: 0.28, salt: 44 }
+];
+
+export type BuildingSpot = {
+	cx: number;
+	cy: number;
+	size: number;
+	tone: number;
+	roofTone: number;
+};
+
+export function buildingSpots(x: number, y: number): BuildingSpot[] {
+	return BUILDING_SEEDS.map((s) => {
+		const jx = (hash2(x, y, s.salt) - 0.5) * 0.06;
+		const jy = (hash2(x, y, s.salt + 100) - 0.5) * 0.06;
+		const sz = s.size * (0.85 + hash2(x, y, s.salt + 200) * 0.3);
+		const tone = hash2(x, y, s.salt + 300);
+		const roofTone = hash2(x, y, s.salt + 400);
+		return { cx: s.px + jx, cy: s.py + jy, size: sz, tone, roofTone };
+	});
+}
+
+// Three wave-glint positions per water tile. Short pale horizontal segments
+// scattered across the surface for a subtle ripple texture.
+const WAVE_SEEDS: { px: number; py: number; salt: number }[] = [
+	{ px: 0.3, py: 0.32, salt: 51 },
+	{ px: 0.62, py: 0.55, salt: 52 },
+	{ px: 0.42, py: 0.78, salt: 53 }
+];
+
+export type WaveGlint = { cx: number; cy: number; len: number };
+
+export function waveGlints(x: number, y: number): WaveGlint[] {
+	return WAVE_SEEDS.map((s) => {
+		const jx = (hash2(x, y, s.salt) - 0.5) * 0.1;
+		const jy = (hash2(x, y, s.salt + 100) - 0.5) * 0.08;
+		const len = 0.08 + hash2(x, y, s.salt + 200) * 0.07;
+		return { cx: s.px + jx, cy: s.py + jy, len };
+	});
+}
+
 // Six tufts per tile for the 'grass' groundover texture in 2D. Small darker
 // blades on top of the flat green base.
 const GRASS_SEEDS: { px: number; py: number; salt: number }[] = [

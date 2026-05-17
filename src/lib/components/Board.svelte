@@ -818,42 +818,6 @@
 					stroke={dark}
 					stroke-width="1.5"
 				/>
-				<rect
-					x={wL + TILE * 0.08}
-					y={-whalfH + 2}
-					width={TILE * 0.16}
-					height={TILE * 0.07}
-					rx="1"
-					fill="#fde68a"
-					fill-opacity="0.9"
-				/>
-				<rect
-					x={wL + TILE * 0.3}
-					y={-whalfH + 2}
-					width={TILE * 0.16}
-					height={TILE * 0.07}
-					rx="1"
-					fill="#fde68a"
-					fill-opacity="0.9"
-				/>
-				<rect
-					x={wL + TILE * 0.08}
-					y={whalfH - 2 - TILE * 0.07}
-					width={TILE * 0.16}
-					height={TILE * 0.07}
-					rx="1"
-					fill="#fde68a"
-					fill-opacity="0.9"
-				/>
-				<rect
-					x={wL + TILE * 0.3}
-					y={whalfH - 2 - TILE * 0.07}
-					width={TILE * 0.16}
-					height={TILE * 0.07}
-					rx="1"
-					fill="#fde68a"
-					fill-opacity="0.9"
-				/>
 				{#if pose.occupied}
 					<circle
 						cx="0"

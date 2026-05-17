@@ -32,6 +32,7 @@
 		treeSpots,
 		waveGlints
 	} from '$lib/railway/decorations';
+	import { particles } from '$lib/railway/particles.svelte';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
 
@@ -134,6 +135,21 @@
 			});
 		}
 		return out;
+	}
+
+	// Pick which edge of the tile to render the station platform on. Stations
+	// only exist on cells with track; if the tile's path is purely vertical
+	// (N↔S) the platform goes on the east edge to sit alongside the rails,
+	// otherwise on the south edge.
+	function platformOrientation(x: number, y: number): 'south' | 'east' {
+		const piece = getPiece(x, y);
+		if (!piece) return 'south';
+		const paths = pathsOf(piece);
+		if (paths.length === 0) return 'south';
+		for (const p of paths) {
+			if (p.from === 1 || p.from === 3 || p.to === 1 || p.to === 3) return 'south';
+		}
+		return 'east';
 	}
 
 	function darken(hex: string): string {
@@ -417,9 +433,10 @@
 						x2={(g.cx + g.len * 0.5) * TILE}
 						y2={g.cy * TILE}
 						stroke="#ffffff"
-						stroke-opacity="0.3"
 						stroke-width={1.6}
 						stroke-linecap="round"
+						class="wave-glint"
+						style="animation-delay: -{((x * 0.73 + y * 0.41 + i * 0.6) % 2.4).toFixed(2)}s"
 					/>
 				{/each}
 				{#if !nN}
@@ -606,12 +623,89 @@
 
 	{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
 		{@const hasPeople = station.peopleWaiting > 0}
+		{@const orient = platformOrientation(x, y)}
+		{@const headCount = Math.min(station.peopleWaiting, 5)}
 		<g transform="translate({x * TILE} {y * TILE})">
+			{#if orient === 'south'}
+				<rect
+					x={TILE * 0.05}
+					y={TILE * 0.76}
+					width={TILE * 0.9}
+					height={TILE * 0.18}
+					rx={TILE * 0.025}
+					fill="#d6c598"
+					stroke="#7a6543"
+					stroke-width="1"
+				/>
+				<rect
+					x={TILE * 0.32}
+					y={TILE * 0.64}
+					width={TILE * 0.36}
+					height={TILE * 0.14}
+					fill="#8a6a48"
+					stroke="#3a2a1a"
+					stroke-width="1"
+				/>
+				<rect
+					x={TILE * 0.28}
+					y={TILE * 0.6}
+					width={TILE * 0.44}
+					height={TILE * 0.06}
+					fill="#3a2a1a"
+				/>
+				{#each Array.from({ length: headCount }) as _, pi (pi)}
+					<circle
+						cx={TILE * (0.18 + pi * 0.16)}
+						cy={TILE * 0.88}
+						r={TILE * 0.045}
+						fill="#fbe49d"
+						stroke="#7a5535"
+						stroke-width="0.6"
+					/>
+				{/each}
+			{:else}
+				<rect
+					x={TILE * 0.76}
+					y={TILE * 0.34}
+					width={TILE * 0.18}
+					height={TILE * 0.6}
+					rx={TILE * 0.025}
+					fill="#d6c598"
+					stroke="#7a6543"
+					stroke-width="1"
+				/>
+				<rect
+					x={TILE * 0.64}
+					y={TILE * 0.45}
+					width={TILE * 0.14}
+					height={TILE * 0.36}
+					fill="#8a6a48"
+					stroke="#3a2a1a"
+					stroke-width="1"
+				/>
+				<rect
+					x={TILE * 0.6}
+					y={TILE * 0.41}
+					width={TILE * 0.06}
+					height={TILE * 0.44}
+					fill="#3a2a1a"
+				/>
+				{#each Array.from({ length: headCount }) as _, pi (pi)}
+					<circle
+						cx={TILE * 0.85}
+						cy={TILE * (0.43 + pi * 0.105)}
+						r={TILE * 0.045}
+						fill="#fbe49d"
+						stroke="#7a5535"
+						stroke-width="0.6"
+					/>
+				{/each}
+			{/if}
 			<rect
 				x={TILE * 0.08}
 				y={TILE * 0.04}
 				width={TILE * 0.84}
-				height={TILE * 0.28}
+				height={TILE * 0.24}
 				rx={TILE * 0.06}
 				fill={hasPeople ? '#f59e0b' : '#94a3b8'}
 				fill-opacity="0.92"
@@ -620,10 +714,10 @@
 			/>
 			<text
 				x={TILE * 0.5}
-				y={TILE * 0.22}
+				y={TILE * 0.18}
 				text-anchor="middle"
 				dominant-baseline="middle"
-				font-size={TILE * 0.2}
+				font-size={TILE * 0.18}
 				font-weight="700"
 				fill="#ffffff"
 				style="paint-order: stroke; stroke: rgba(0,0,0,0.35); stroke-width: 2;"
@@ -634,48 +728,155 @@
 	{/each}
 
 	{#each vehiclePoses as pose (pose.key)}
+		{@const dark = darken(pose.color)}
 		<g transform="translate({pose.x} {pose.y}) rotate({pose.heading})">
 			{#if pose.kind === 'loco'}
+				{@const bodyL = -TILE * 0.32}
+				{@const bodyR = TILE * 0.32}
+				{@const halfH = TILE * 0.18}
+				<ellipse
+					cx="0"
+					cy={halfH * 1.1}
+					rx={TILE * 0.36}
+					ry={halfH * 0.45}
+					fill="#000"
+					fill-opacity="0.18"
+				/>
+				<rect x={bodyL - 3} y="-2.5" width="3" height="5" fill="#222" />
+				<rect x={-TILE * 0.22} y={-halfH - 2} width={TILE * 0.07} height="3" fill="#222" />
+				<rect x={-TILE * 0.22} y={halfH - 1} width={TILE * 0.07} height="3" fill="#222" />
+				<rect x={TILE * 0.06} y={-halfH - 2} width={TILE * 0.07} height="3" fill="#222" />
+				<rect x={TILE * 0.06} y={halfH - 1} width={TILE * 0.07} height="3" fill="#222" />
 				<rect
-					x={-TILE * 0.32}
-					y={-TILE * 0.18}
+					x={bodyL}
+					y={-halfH}
 					width={TILE * 0.64}
-					height={TILE * 0.36}
-					rx={TILE * 0.08}
+					height={halfH * 2}
+					rx={TILE * 0.07}
 					fill={pose.color}
-					stroke={darken(pose.color)}
+					stroke={dark}
 					stroke-width="1.5"
 				/>
 				<rect
-					x={TILE * 0.16}
-					y={-TILE * 0.1}
-					width={TILE * 0.16}
-					height={TILE * 0.2}
-					fill="#fbbf24"
+					x={bodyL}
+					y={-halfH}
+					width={TILE * 0.22}
+					height={halfH * 2}
+					rx={TILE * 0.07}
+					fill={dark}
+					fill-opacity="0.55"
+				/>
+				<rect
+					x={bodyL + TILE * 0.05}
+					y={-TILE * 0.08}
+					width={TILE * 0.12}
+					height={TILE * 0.16}
+					rx="1.5"
+					fill="#fde68a"
+				/>
+				<circle cx={TILE * 0.05} cy="0" r={TILE * 0.065} fill="#1a1a1a" />
+				<circle cx={TILE * 0.05} cy="0" r={TILE * 0.04} fill="#555" />
+				<circle
+					cx={bodyR - TILE * 0.03}
+					cy="0"
+					r={TILE * 0.04}
+					fill="#fef3c7"
+					stroke="#92400e"
+					stroke-width="0.5"
+				/>
+				<polygon
+					points="{bodyR},{-halfH + 1} {bodyR + TILE * 0.09},0 {bodyR},{halfH - 1}"
+					fill="#3a3a3a"
+					stroke="#1a1a1a"
+					stroke-width="0.5"
 				/>
 			{:else}
+				{@const wL = -TILE * 0.27}
+				{@const wR = TILE * 0.27}
+				{@const whalfH = TILE * 0.16}
+				<ellipse
+					cx="0"
+					cy={whalfH * 1.1}
+					rx={TILE * 0.3}
+					ry={whalfH * 0.45}
+					fill="#000"
+					fill-opacity="0.18"
+				/>
+				<rect x={wL - 3} y="-2.5" width="3" height="5" fill="#222" />
+				<rect x={wR} y="-2.5" width="3" height="5" fill="#222" />
+				<rect x={-TILE * 0.18} y={-whalfH - 2} width={TILE * 0.07} height="3" fill="#222" />
+				<rect x={-TILE * 0.18} y={whalfH - 1} width={TILE * 0.07} height="3" fill="#222" />
+				<rect x={TILE * 0.11} y={-whalfH - 2} width={TILE * 0.07} height="3" fill="#222" />
+				<rect x={TILE * 0.11} y={whalfH - 1} width={TILE * 0.07} height="3" fill="#222" />
 				<rect
-					x={-TILE * 0.27}
-					y={-TILE * 0.16}
+					x={wL}
+					y={-whalfH}
 					width={TILE * 0.54}
-					height={TILE * 0.32}
-					rx={TILE * 0.06}
+					height={whalfH * 2}
+					rx={TILE * 0.05}
 					fill={pose.color}
-					stroke={darken(pose.color)}
+					stroke={dark}
 					stroke-width="1.5"
+				/>
+				<rect
+					x={wL + TILE * 0.08}
+					y={-whalfH + 2}
+					width={TILE * 0.16}
+					height={TILE * 0.07}
+					rx="1"
+					fill="#fde68a"
+					fill-opacity="0.9"
+				/>
+				<rect
+					x={wL + TILE * 0.3}
+					y={-whalfH + 2}
+					width={TILE * 0.16}
+					height={TILE * 0.07}
+					rx="1"
+					fill="#fde68a"
+					fill-opacity="0.9"
+				/>
+				<rect
+					x={wL + TILE * 0.08}
+					y={whalfH - 2 - TILE * 0.07}
+					width={TILE * 0.16}
+					height={TILE * 0.07}
+					rx="1"
+					fill="#fde68a"
+					fill-opacity="0.9"
+				/>
+				<rect
+					x={wL + TILE * 0.3}
+					y={whalfH - 2 - TILE * 0.07}
+					width={TILE * 0.16}
+					height={TILE * 0.07}
+					rx="1"
+					fill="#fde68a"
+					fill-opacity="0.9"
 				/>
 				{#if pose.occupied}
 					<circle
 						cx="0"
 						cy="0"
-						r={TILE * 0.08}
-						fill="#fef3c7"
-						stroke={darken(pose.color)}
-						stroke-width="1"
+						r={TILE * 0.06}
+						fill="#fbe49d"
+						stroke="#7a5535"
+						stroke-width="0.7"
 					/>
 				{/if}
 			{/if}
 		</g>
+	{/each}
+
+	{#each particles.list as p (p.id)}
+		{@const t = Math.min(1, p.life / p.maxLife)}
+		<circle
+			cx={p.x * TILE}
+			cy={p.y * TILE}
+			r={(0.06 + t * 0.12) * TILE}
+			fill="#ffffff"
+			fill-opacity={(1 - t) * 0.65}
+		/>
 	{/each}
 
 	{#each locoBadges as b (b.key)}
@@ -705,3 +906,19 @@
 		</g>
 	{/each}
 </svg>
+
+<style>
+	.wave-glint {
+		stroke-opacity: 0.3;
+		animation: water-shimmer 2.4s ease-in-out infinite;
+	}
+	@keyframes water-shimmer {
+		0%,
+		100% {
+			stroke-opacity: 0.18;
+		}
+		50% {
+			stroke-opacity: 0.65;
+		}
+	}
+</style>

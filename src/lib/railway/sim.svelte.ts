@@ -10,8 +10,9 @@ import {
 	type Vehicle
 } from './types';
 import { pathsOf } from './pieces';
-import { pathLength } from './geometry';
+import { pathLength, sample } from './geometry';
 import { getPiece, grid } from './grid.svelte';
+import { hasActiveParticles, spawnSteam, tickParticles } from './particles.svelte';
 
 export type { Reverser };
 
@@ -34,6 +35,39 @@ export const STATION_CAPACITY = 10;
 let rafHandle = 0;
 let lastTime = 0;
 let nextLocoId = 1;
+
+// Seconds between steam puffs from a moving loco. Per-loco accumulator carried
+// in steamTimers so multiple locos don't share phase.
+const STEAM_INTERVAL = 0.09;
+const steamTimers = new Map<number, number>();
+
+function maybeSpawnSteam(l: Loco, dt: number) {
+	if (!locoIsMoving(l)) {
+		steamTimers.delete(l.id);
+		return;
+	}
+	let timer = (steamTimers.get(l.id) ?? 0) + dt;
+	if (timer < STEAM_INTERVAL) {
+		steamTimers.set(l.id, timer);
+		return;
+	}
+	steamTimers.set(l.id, timer - STEAM_INTERVAL);
+	const piece = getPiece(l.x, l.y);
+	if (!piece) return;
+	const path = pathsOf(piece)[l.pathIdx];
+	if (!path) return;
+	const s = sample(path, l.t);
+	const heading = s.heading + (l.dir === -1 ? Math.PI : 0);
+	const cosH = Math.cos(heading);
+	const sinH = Math.sin(heading);
+	// Chimney sits ~0.18 tile-units forward of the loco centre. Steam drifts
+	// rearward with a perpendicular jitter so consecutive puffs don't line up.
+	const chX = l.x + s.x + cosH * 0.18;
+	const chY = l.y + s.y + sinH * 0.18;
+	const drift = 0.25;
+	const jitter = (Math.random() - 0.5) * 0.35;
+	spawnSteam(chX, chY, -cosH * drift + -sinH * jitter, -sinH * drift + cosH * jitter);
+}
 
 function findLoco(id: number): Loco | undefined {
 	return sim.locos.find((l) => l.id === id);
@@ -73,12 +107,14 @@ export function placeLoco(x: number, y: number) {
 export function removeLoco(id: number) {
 	const idx = sim.locos.findIndex((l) => l.id === id);
 	if (idx >= 0) sim.locos.splice(idx, 1);
+	steamTimers.delete(id);
 	// loop() self-cancels via shouldAnimate() — don't tear down here in case
 	// stations still need spawn ticks.
 }
 
 export function clearAllLocos() {
 	sim.locos.length = 0;
+	steamTimers.clear();
 	nextLocoId = 1;
 	// loop() self-cancels via shouldAnimate().
 }
@@ -242,7 +278,7 @@ function anyStationBacklog(): boolean {
 }
 
 function shouldAnimate(): boolean {
-	return anyMoving() || anyBoarding() || anyStationBacklog();
+	return anyMoving() || anyBoarding() || anyStationBacklog() || hasActiveParticles();
 }
 
 // Read-only walk forward along the loco's intended route. Returns the distance
@@ -524,8 +560,10 @@ function loop() {
 	lastTime = now;
 
 	tickStations(dt);
+	tickParticles(dt);
 
 	for (const l of sim.locos) {
+		maybeSpawnSteam(l, dt);
 		if (l.boardingAt) {
 			tickBoarding(l, dt);
 			continue;

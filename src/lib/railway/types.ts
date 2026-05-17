@@ -55,6 +55,9 @@ export type Loco = Vehicle & {
 	color: string;
 	reverser: Reverser;
 	throttle: number;
+	// Current actual travel speed in tile-units/sec. Ramps toward the throttle
+	// (or 0 when braking/stopped) over time; not directly user-settable.
+	speed: number;
 	wagons: Wagon[];
 	routingTrail: RoutingDecision[];
 	// One entry per onboard passenger; the value is the cellKey of the station

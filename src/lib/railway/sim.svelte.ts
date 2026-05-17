@@ -25,6 +25,11 @@ export const WAGON_LENGTH = 0.6;
 // People stop at the centre of the station tile; at this distance the loco
 // begins decelerating to arrive at zero speed.
 export const APPROACH_DIST = 1.8;
+// Rate at which a loco's actual speed ramps toward its throttle (and back to 0
+// when braking). Asymmetric — brakes are stronger than accel so deliberate
+// stops feel snappy while departures stay gentle.
+export const ACCELERATION = 4;
+export const DECELERATION = 8;
 // Seconds between (de)boarding events while the loco is paused at a station.
 export const BOARDING_INTERVAL = 0.35;
 // Seconds between new-passenger spawns at each station.
@@ -94,6 +99,7 @@ export function placeLoco(x: number, y: number) {
 		stopped: false,
 		reverser: 0,
 		throttle: 0,
+		speed: 0,
 		routingCursor: 0,
 		wagons: [],
 		routingTrail: [],
@@ -151,6 +157,7 @@ export function replaceLocos(saved: SavedLocoState[]) {
 			stopped: false,
 			reverser: 0,
 			throttle: 0,
+			speed: 0,
 			routingCursor: 0,
 			wagons: [],
 			routingTrail: [],
@@ -259,7 +266,9 @@ function pruneTrail(loco: Loco) {
 }
 
 function locoIsMoving(l: Loco): boolean {
-	return !l.stopped && l.reverser !== 0 && l.throttle > 0;
+	if (l.stopped) return false;
+	// Either physically rolling (speed bleeding off) or actively powered.
+	return l.speed > 1e-6 || (l.reverser !== 0 && l.throttle > 0);
 }
 
 function anyMoving(): boolean {
@@ -565,22 +574,39 @@ function loop() {
 	for (const l of sim.locos) {
 		maybeSpawnSteam(l, dt);
 		if (l.boardingAt) {
+			l.speed = 0;
 			tickBoarding(l, dt);
 			continue;
 		}
-		if (locoIsMoving(l)) {
-			let dist = l.throttle * dt;
-			const distToStop = distanceToNextStop(l, APPROACH_DIST + dist);
-			const distToVehicleRaw = distanceToNextVehicle(l, APPROACH_DIST + WAGON_LENGTH + dist);
-			const distToVehicle =
-				distToVehicleRaw === Infinity ? Infinity : Math.max(0, distToVehicleRaw - WAGON_LENGTH);
-			const distToObstacle = Math.min(distToStop, distToVehicle);
-			if (distToObstacle < Infinity) {
-				const factor = Math.max(0, Math.min(1, distToObstacle / APPROACH_DIST));
-				dist = Math.min(dist * factor, distToObstacle);
+
+		// Look ahead far enough to drive both the braking target (within
+		// APPROACH_DIST) and the hard overshoot cap on this frame's motion.
+		const frameDist = l.speed * dt;
+		const lookahead = Math.max(APPROACH_DIST, frameDist);
+		const distToStop = distanceToNextStop(l, lookahead);
+		const distToVehicleRaw = distanceToNextVehicle(l, lookahead + WAGON_LENGTH);
+		const distToVehicle =
+			distToVehicleRaw === Infinity ? Infinity : Math.max(0, distToVehicleRaw - WAGON_LENGTH);
+		const distToObstacle = Math.min(distToStop, distToVehicle);
+
+		// Target speed: throttle when powered, attenuated linearly as we close
+		// on an obstacle so the loco arrives with zero speed.
+		let target = 0;
+		if (!l.stopped && l.reverser !== 0 && l.throttle > 0) {
+			target = l.throttle;
+			if (distToObstacle < APPROACH_DIST) {
+				target = Math.min(target, l.throttle * Math.max(0, distToObstacle / APPROACH_DIST));
 			}
-			const sign = l.reverser as 1 | -1;
+		}
+
+		if (l.speed < target) l.speed = Math.min(target, l.speed + ACCELERATION * dt);
+		else if (l.speed > target) l.speed = Math.max(target, l.speed - DECELERATION * dt);
+
+		if (l.speed > 1e-6 && l.reverser !== 0) {
+			let dist = l.speed * dt;
+			if (distToObstacle < Infinity) dist = Math.min(dist, distToObstacle);
 			if (dist > 1e-9) {
+				const sign = l.reverser as 1 | -1;
 				const prevKey = cellKey(l.x, l.y);
 				step(l, dist, sign, l.routingTrail);
 				for (const w of l.wagons) {
@@ -618,6 +644,9 @@ export function setReverser(id: number, r: Reverser) {
 	const loco = findLoco(id);
 	if (!loco) return;
 	if (r === loco.reverser) return;
+	// Flipping direction while rolling would push the train backward at full
+	// speed; force a fresh start in the new direction.
+	if (loco.reverser !== 0 && r !== 0) loco.speed = 0;
 	loco.reverser = r;
 	if (r !== 0) {
 		if (loco.stopped) loco.stopped = false;

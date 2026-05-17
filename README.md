@@ -1,7 +1,7 @@
 ## Minirail
 
 Minirail is inspired by my child's never-ending obsession with trains. I wanted a simple way for them to draw tracks and watch the trains zip around. 
-![alt text](image.png)
+<img width="729" height="334" alt="image" src="https://github.com/user-attachments/assets/8ec6f6a5-b92a-4676-a903-c44a2069467a" />
 
 ### Features
 * **Stress-free** - No progression systems, or advanced management by design. Just a simple sandbox.

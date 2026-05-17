@@ -3,6 +3,8 @@
 		sim,
 		setReverser,
 		setThrottle,
+		setAutoReverse,
+		setSwitchLine,
 		removeLoco,
 		clearAllLocos,
 		addWagon,
@@ -36,7 +38,9 @@
 		Building,
 		Waves,
 		Sprout,
-		Mountain
+		Mountain,
+		Repeat,
+		Shuffle
 	} from 'lucide-svelte';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
@@ -196,6 +200,29 @@
 						<span class="w-6 text-right text-sm font-medium text-foreground tabular-nums">
 							{loco.throttle}
 						</span>
+					</div>
+
+					<div class="flex items-center gap-1">
+						<Button
+							variant={loco.autoReverse ? 'default' : 'outline'}
+							size="icon-sm"
+							onclick={() => setAutoReverse(loco.id, !loco.autoReverse)}
+							aria-pressed={loco.autoReverse}
+							aria-label="Auto-reverse on dead end for Loco {loco.id}"
+							title="Auto-reverse on dead end"
+						>
+							<Repeat />
+						</Button>
+						<Button
+							variant={loco.switchLine ? 'default' : 'outline'}
+							size="icon-sm"
+							onclick={() => setSwitchLine(loco.id, !loco.switchLine)}
+							aria-pressed={loco.switchLine}
+							aria-label="Toggle switches on pass for Loco {loco.id}"
+							title="Toggle switches when leaving"
+						>
+							<Shuffle />
+						</Button>
 					</div>
 
 					<div class="flex items-center gap-1.5">

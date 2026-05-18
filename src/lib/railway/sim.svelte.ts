@@ -3,6 +3,7 @@ import {
 	dy,
 	opposite,
 	cellKey,
+	isSwitch,
 	LOCO_COLORS,
 	type Loco,
 	type Reverser,
@@ -11,7 +12,7 @@ import {
 } from './types';
 import { pathsOf } from './pieces';
 import { pathLength, sample } from './geometry';
-import { getPiece, grid } from './grid.svelte';
+import { getPiece, grid, toggleAt } from './grid.svelte';
 import { hasActiveParticles, spawnSteam, tickParticles } from './particles.svelte';
 
 export type { Reverser };
@@ -106,7 +107,9 @@ export function placeLoco(x: number, y: number) {
 		passengers: [],
 		boardingAt: null,
 		boardingTimer: 0,
-		lastBoardedAt: null
+		lastBoardedAt: null,
+		autoReverse: false,
+		switchLine: false
 	});
 }
 
@@ -133,6 +136,8 @@ export type SavedLocoState = {
 	dir: 1 | -1;
 	color: string;
 	wagons: number;
+	autoReverse?: boolean;
+	switchLine?: boolean;
 };
 
 // Replace the entire loco list with the given saved states. Used by the
@@ -164,7 +169,9 @@ export function replaceLocos(saved: SavedLocoState[]) {
 			passengers: [],
 			boardingAt: null,
 			boardingTimer: 0,
-			lastBoardedAt: null
+			lastBoardedAt: null,
+			autoReverse: s.autoReverse ?? false,
+			switchLine: s.switchLine ?? false
 		};
 		sim.locos.push(loco);
 		for (let i = 0; i < s.wagons; i++) addWagon(loco.id);
@@ -180,7 +187,13 @@ export function replaceLocos(saved: SavedLocoState[]) {
 // the recorded pathIdx — keeping the chain consistent with whichever vehicle
 // led through this crossing. If no match is found, the vehicle is acting as
 // leader: it picks based on the switch's current `active` state and appends.
-function step(v: Vehicle, distance: number, motionSign: 1 | -1, trail: RoutingDecision[]) {
+function step(
+	v: Vehicle,
+	distance: number,
+	motionSign: 1 | -1,
+	trail: RoutingDecision[],
+	onLeaveTile?: (x: number, y: number) => void
+) {
 	let remaining = distance;
 	let safety = 1000;
 	while (remaining > 1e-9 && !v.stopped && safety-- > 0) {
@@ -245,12 +258,15 @@ function step(v: Vehicle, distance: number, motionSign: 1 | -1, trail: RoutingDe
 				v.routingCursor = trail.length;
 			}
 		}
+		const leftX = v.x;
+		const leftY = v.y;
 		v.x = nx;
 		v.y = ny;
 		v.pathIdx = chosen.idx;
 		const newEff = (chosen.entry === 'from' ? 1 : -1) as 1 | -1;
 		v.dir = (newEff * motionSign) as 1 | -1;
 		v.t = chosen.entry === 'from' ? 0 : 1;
+		onLeaveTile?.(leftX, leftY);
 	}
 }
 
@@ -563,6 +579,29 @@ function tickStations(dt: number) {
 	}
 }
 
+function makeSwitchLineCallback(): (x: number, y: number) => void {
+	return (x, y) => {
+		const piece = getPiece(x, y);
+		if (piece && isSwitch(piece.kind)) toggleAt(x, y);
+	};
+}
+
+// Called after a frame's worth of stepping when autoReverse is enabled. If the
+// leader (loco when going forward, rear wagon when reversing) hit a dead end
+// this frame, flip the reverser so the train backs out instead of derailing.
+function maybeAutoReverse(l: Loco, sign: 1 | -1) {
+	const leader: Vehicle = sign === -1 && l.wagons.length > 0 ? l.wagons[l.wagons.length - 1] : l;
+	if (!leader.stopped) return;
+	// Clear stopped state on all cars — the train is about to move the other way.
+	l.stopped = false;
+	for (const w of l.wagons) w.stopped = false;
+	// Flipping reverser through setReverser would zero the speed AND wake the
+	// loop; we want both, plus we need to bypass its guard that no-ops when r
+	// equals the current reverser.
+	l.reverser = -sign as Reverser;
+	l.speed = 0;
+}
+
 function loop() {
 	const now = performance.now();
 	const dt = Math.min((now - lastTime) / 1000, 0.1);
@@ -608,7 +647,8 @@ function loop() {
 			if (dist > 1e-9) {
 				const sign = l.reverser as 1 | -1;
 				const prevKey = cellKey(l.x, l.y);
-				step(l, dist, sign, l.routingTrail);
+				const onLeaveTile = l.switchLine ? makeSwitchLineCallback() : undefined;
+				step(l, dist, sign, l.routingTrail, onLeaveTile);
 				for (const w of l.wagons) {
 					if (!w.stopped) step(w, dist, sign, l.routingTrail);
 				}
@@ -616,6 +656,7 @@ function loop() {
 				if (l.lastBoardedAt && cellKey(l.x, l.y) !== prevKey) {
 					l.lastBoardedAt = null;
 				}
+				if (l.autoReverse) maybeAutoReverse(l, sign);
 			}
 		}
 		maybeStartBoarding(l);
@@ -653,6 +694,27 @@ export function setReverser(id: number, r: Reverser) {
 		for (const w of loco.wagons) if (w.stopped) w.stopped = false;
 	}
 	startLoopIfNeeded();
+}
+
+export function setAutoReverse(id: number, on: boolean) {
+	const loco = findLoco(id);
+	if (!loco) return;
+	loco.autoReverse = on;
+	// If the loco was derailed at a dead end, flip it now so the new mode takes
+	// effect immediately rather than waiting for the next dead-end contact.
+	if (on && loco.stopped && loco.reverser !== 0) {
+		loco.stopped = false;
+		for (const w of loco.wagons) w.stopped = false;
+		loco.reverser = -loco.reverser as Reverser;
+		loco.speed = 0;
+		startLoopIfNeeded();
+	}
+}
+
+export function setSwitchLine(id: number, on: boolean) {
+	const loco = findLoco(id);
+	if (!loco) return;
+	loco.switchLine = on;
 }
 
 export function setThrottle(id: number, t: number) {

@@ -64,15 +64,20 @@ export function serializeLayout(name: string): SavedLayout {
 		const [x, y] = k.split(',').map(Number);
 		decorations.push({ x, y, kind: deco.kind });
 	}
-	const locos: SavedLocoState[] = sim.locos.map((l) => ({
-		x: l.x,
-		y: l.y,
-		pathIdx: l.pathIdx,
-		t: l.t,
-		dir: l.dir,
-		color: l.color,
-		wagons: l.wagons.length
-	}));
+	const locos: SavedLocoState[] = sim.locos.map((l) => {
+		const out: SavedLocoState = {
+			x: l.x,
+			y: l.y,
+			pathIdx: l.pathIdx,
+			t: l.t,
+			dir: l.dir,
+			color: l.color,
+			wagons: l.wagons.length
+		};
+		if (l.autoReverse) out.autoReverse = true;
+		if (l.switchLine) out.switchLine = true;
+		return out;
+	});
 	return {
 		version: SCHEMA_VERSION,
 		name,
@@ -172,7 +177,7 @@ export function parseLayout(json: string): SavedLayout {
 		) {
 			throw new Error(`Loco ${i} is malformed.`);
 		}
-		return {
+		const out: SavedLocoState = {
 			x: ll.x,
 			y: ll.y,
 			pathIdx: ll.pathIdx,
@@ -181,6 +186,9 @@ export function parseLayout(json: string): SavedLayout {
 			color: ll.color,
 			wagons: Math.max(0, Math.floor(ll.wagons))
 		};
+		if (ll.autoReverse === true) out.autoReverse = true;
+		if (ll.switchLine === true) out.switchLine = true;
+		return out;
 	});
 	return {
 		version: SCHEMA_VERSION,

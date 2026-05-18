@@ -73,6 +73,12 @@ export type Loco = Vehicle & {
 	// null. Suppresses re-triggering boarding on the same tile while the loco
 	// hasn't physically moved off it; cleared when the loco enters a new cell.
 	lastBoardedAt: string | null;
+	// When true, hitting a dead end flips the loco's reverser instead of
+	// stopping it.
+	autoReverse: boolean;
+	// When true, the loco toggles each switch tile it leaves — acting as a
+	// sequencer that alternates the switch on every pass.
+	switchLine: boolean;
 };
 
 export type Station = {

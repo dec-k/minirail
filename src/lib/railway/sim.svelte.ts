@@ -411,6 +411,112 @@ function distanceToNextStop(loco: Loco, maxDist: number): number {
 	return Infinity;
 }
 
+// Read-only walk forward along the loco's intended route from the *leader*
+// (loco when going forward, rear wagon when reversing). Returns distance until
+// the leader would reach a dead end (no next piece or no path connects at the
+// entry port), or +Infinity if no dead end within `maxDist`. Folded into the
+// obstacle distance so the train decelerates to rest at the wall — without
+// this, reversing into a stub track lets the loco step past stopped wagons
+// and crush the chain.
+function distanceToDeadEnd(loco: Loco, maxDist: number): number {
+	if (loco.reverser === 0) return Infinity;
+	const motionSign = loco.reverser as 1 | -1;
+	const leader: Vehicle =
+		motionSign === -1 && loco.wagons.length > 0 ? loco.wagons[loco.wagons.length - 1] : loco;
+	let x = leader.x;
+	let y = leader.y;
+	let pathIdx = leader.pathIdx;
+	let t = leader.t;
+	let dir = leader.dir;
+	let cursor = leader.routingCursor;
+	let dist = 0;
+	let safety = 64;
+	while (dist <= maxDist && safety-- > 0) {
+		const piece = getPiece(x, y);
+		if (!piece) return dist;
+		const paths = pathsOf(piece);
+		const path = paths[pathIdx];
+		if (!path) return dist;
+		const pl = pathLength(path);
+		const effDir = (dir * motionSign) as 1 | -1;
+		const remainingT = effDir === 1 ? 1 - t : t;
+		const remainingDist = remainingT * pl;
+		dist += remainingDist;
+		if (dist > maxDist) return Infinity;
+		const exitDir = effDir === 1 ? path.to : path.from;
+		const nx = x + dx[exitDir];
+		const ny = y + dy[exitDir];
+		const entryDir = opposite(exitDir);
+		const nextPiece = getPiece(nx, ny);
+		if (!nextPiece) return dist;
+		const nextPaths = pathsOf(nextPiece);
+		const candidates: { idx: number; entry: 'from' | 'to' }[] = [];
+		for (let i = 0; i < nextPaths.length; i++) {
+			if (nextPaths[i].from === entryDir) candidates.push({ idx: i, entry: 'from' });
+			else if (nextPaths[i].to === entryDir) candidates.push({ idx: i, entry: 'to' });
+		}
+		if (candidates.length === 0) return dist;
+		let chosen = candidates[0];
+		if (candidates.length > 1) {
+			const tk = cellKey(nx, ny);
+			let matched: { idx: number; entry: 'from' | 'to' } | null = null;
+			for (let k = cursor; k < loco.routingTrail.length; k++) {
+				const r = loco.routingTrail[k];
+				if (r.tileKey === tk && r.entryPort === entryDir) {
+					const c = candidates.find((cn) => cn.idx === r.pathIdx);
+					if (c) {
+						matched = c;
+						cursor = k + 1;
+						break;
+					}
+				}
+			}
+			if (matched) chosen = matched;
+			else {
+				const active = nextPiece.active ?? 0;
+				chosen = candidates.find((c) => c.idx === active) ?? candidates[0];
+			}
+		}
+		x = nx;
+		y = ny;
+		pathIdx = chosen.idx;
+		const newEff = (chosen.entry === 'from' ? 1 : -1) as 1 | -1;
+		dir = (newEff * motionSign) as 1 | -1;
+		t = chosen.entry === 'from' ? 0 : 1;
+	}
+	return Infinity;
+}
+
+// True when the leader (loco forward / rear wagon when reversing) is sitting
+// exactly at the boundary of its current tile with no valid continuation in
+// the motion direction — i.e., the train has arrived at a dead end and can't
+// move further this direction.
+function leaderAtDeadEnd(loco: Loco): boolean {
+	if (loco.reverser === 0) return false;
+	const sign = loco.reverser as 1 | -1;
+	const leader: Vehicle =
+		sign === -1 && loco.wagons.length > 0 ? loco.wagons[loco.wagons.length - 1] : loco;
+	const piece = getPiece(leader.x, leader.y);
+	if (!piece) return true;
+	const paths = pathsOf(piece);
+	const path = paths[leader.pathIdx];
+	if (!path) return true;
+	const effDir = (leader.dir * sign) as 1 | -1;
+	const atBoundary = effDir === 1 ? leader.t >= 1 - 1e-6 : leader.t <= 1e-6;
+	if (!atBoundary) return false;
+	const exitDir = effDir === 1 ? path.to : path.from;
+	const nx = leader.x + dx[exitDir];
+	const ny = leader.y + dy[exitDir];
+	const nextPiece = getPiece(nx, ny);
+	if (!nextPiece) return true;
+	const entryDir = opposite(exitDir);
+	const nextPaths = pathsOf(nextPiece);
+	for (let i = 0; i < nextPaths.length; i++) {
+		if (nextPaths[i].from === entryDir || nextPaths[i].to === entryDir) return false;
+	}
+	return true;
+}
+
 // Read-only walk forward along the loco's intended route. Returns the distance
 // (in tile units) from this train's leading vehicle (loco when going forward,
 // rear wagon when reversing) to the nearest point occupied by some other
@@ -602,20 +708,28 @@ function makeSwitchLineCallback(): (x: number, y: number) => void {
 	};
 }
 
-// Called after a frame's worth of stepping when autoReverse is enabled. If the
-// leader (loco when going forward, rear wagon when reversing) hit a dead end
-// this frame, flip the reverser so the train backs out instead of derailing.
-function maybeAutoReverse(l: Loco, sign: 1 | -1) {
-	const leader: Vehicle = sign === -1 && l.wagons.length > 0 ? l.wagons[l.wagons.length - 1] : l;
-	if (!leader.stopped) return;
-	// Clear stopped state on all cars — the train is about to move the other way.
+// Resolve any dead-end / derailed state for `l` before this frame's motion is
+// computed. Returns true if the loco was neutralised or auto-reversed and the
+// caller should skip motion for this frame. Covers two cases:
+//   1. The leader has come to rest at the end of a stub track (via lookahead).
+//   2. step() set the stopped flag on some car after the track was removed
+//      under the train.
+// With auto-reverse on, the train flips and continues; otherwise the reverser
+// drops to neutral so the train doesn't sit pushing against a wall.
+function resolveDeadEnd(l: Loco): boolean {
+	if (l.reverser === 0) return false;
+	const someStopped = l.stopped || l.wagons.some((w) => w.stopped);
+	if (!someStopped && !leaderAtDeadEnd(l)) return false;
+	const sign = l.reverser as 1 | -1;
 	l.stopped = false;
 	for (const w of l.wagons) w.stopped = false;
-	// Flipping reverser through setReverser would zero the speed AND wake the
-	// loop; we want both, plus we need to bypass its guard that no-ops when r
-	// equals the current reverser.
-	l.reverser = -sign as Reverser;
 	l.speed = 0;
+	if (l.autoReverse) {
+		l.reverser = -sign as Reverser;
+	} else {
+		l.reverser = 0;
+	}
+	return true;
 }
 
 function loop() {
@@ -634,6 +748,8 @@ function loop() {
 			continue;
 		}
 
+		if (resolveDeadEnd(l)) continue;
+
 		// Look ahead far enough to drive both the braking target (within
 		// APPROACH_DIST) and the hard overshoot cap on this frame's motion.
 		const frameDist = l.speed * dt;
@@ -642,7 +758,8 @@ function loop() {
 		const distToVehicleRaw = distanceToNextVehicle(l, lookahead + WAGON_LENGTH);
 		const distToVehicle =
 			distToVehicleRaw === Infinity ? Infinity : Math.max(0, distToVehicleRaw - WAGON_LENGTH);
-		const distToObstacle = Math.min(distToStop, distToVehicle);
+		const distToDeadEnd = distanceToDeadEnd(l, lookahead);
+		const distToObstacle = Math.min(distToStop, distToVehicle, distToDeadEnd);
 
 		// Target speed: throttle when powered, attenuated linearly as we close
 		// on an obstacle so the loco arrives with zero speed.
@@ -672,7 +789,6 @@ function loop() {
 				if (l.lastBoardedAt && cellKey(l.x, l.y) !== prevKey) {
 					l.lastBoardedAt = null;
 				}
-				if (l.autoReverse) maybeAutoReverse(l, sign);
 			}
 		}
 		maybeStartBoarding(l);
@@ -716,15 +832,7 @@ export function setAutoReverse(id: number, on: boolean) {
 	const loco = findLoco(id);
 	if (!loco) return;
 	loco.autoReverse = on;
-	// If the loco was derailed at a dead end, flip it now so the new mode takes
-	// effect immediately rather than waiting for the next dead-end contact.
-	if (on && loco.stopped && loco.reverser !== 0) {
-		loco.stopped = false;
-		for (const w of loco.wagons) w.stopped = false;
-		loco.reverser = -loco.reverser as Reverser;
-		loco.speed = 0;
-		startLoopIfNeeded();
-	}
+	startLoopIfNeeded();
 }
 
 export function setSwitchLine(id: number, on: boolean) {

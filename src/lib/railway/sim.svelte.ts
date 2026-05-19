@@ -185,13 +185,19 @@ export function replaceLocos(saved: SavedLocoState[]) {
 // At a switch facing-point, the vehicle scans the shared `trail` from its own
 // `routingCursor`. If a matching (tileKey, entryPort) entry is found, it reuses
 // the recorded pathIdx — keeping the chain consistent with whichever vehicle
-// led through this crossing. If no match is found, the vehicle is acting as
-// leader: it picks based on the switch's current `active` state and appends.
+// led through this crossing. Otherwise, if a same-train sibling is already on
+// the destination tile, adopt its pathIdx: the chain is physically continuous
+// so the entering vehicle must be on the same path. Only if both fail does the
+// vehicle act as leader, picking based on the switch's current `active` and
+// appending to the trail. The sibling fallback fixes reverse re-entries via
+// the common port, where the original forward trail entry has a different
+// entryPort and the user may have thrown the switch in between.
 function step(
 	v: Vehicle,
 	distance: number,
 	motionSign: 1 | -1,
 	trail: RoutingDecision[],
+	siblings: readonly Vehicle[],
 	onLeaveTile?: (x: number, y: number) => void
 ) {
 	let remaining = distance;
@@ -245,6 +251,16 @@ function step(
 					if (c) {
 						matched = c;
 						v.routingCursor = k + 1;
+						break;
+					}
+				}
+			}
+			if (!matched) {
+				for (const sib of siblings) {
+					if (sib === v || sib.x !== nx || sib.y !== ny) continue;
+					const c = candidates.find((cn) => cn.idx === sib.pathIdx);
+					if (c) {
+						matched = c;
 						break;
 					}
 				}
@@ -648,9 +664,9 @@ function loop() {
 				const sign = l.reverser as 1 | -1;
 				const prevKey = cellKey(l.x, l.y);
 				const onLeaveTile = l.switchLine ? makeSwitchLineCallback() : undefined;
-				step(l, dist, sign, l.routingTrail, onLeaveTile);
+				step(l, dist, sign, l.routingTrail, l.wagons, onLeaveTile);
 				for (const w of l.wagons) {
-					if (!w.stopped) step(w, dist, sign, l.routingTrail);
+					if (!w.stopped) step(w, dist, sign, l.routingTrail, [l, ...l.wagons]);
 				}
 				pruneTrail(l);
 				if (l.lastBoardedAt && cellKey(l.x, l.y) !== prevKey) {
@@ -743,8 +759,9 @@ export function addWagon(id: number) {
 		routingCursor: 0
 	};
 	// Probe is exploratory; pass a throwaway trail so its decisions don't
-	// pollute the train's shared trail.
-	step(probe, WAGON_LENGTH, -1, []);
+	// pollute the train's shared trail. Existing cars are siblings so the probe
+	// follows the chain through any switches it crosses.
+	step(probe, WAGON_LENGTH, -1, [], [loco, ...loco.wagons]);
 	if (probe.stopped) return;
 	loco.wagons.push({
 		x: probe.x,

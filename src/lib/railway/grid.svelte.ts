@@ -20,8 +20,8 @@ import {
 } from './pieces';
 
 export const grid = $state({
-	width: 20,
-	height: 15,
+	width: 40,
+	height: 30,
 	cells: new SvelteMap<string, Piece>(),
 	stations: new SvelteMap<string, Station>(),
 	// Decorations that occupy empty cells exclusively (tree, building, water).

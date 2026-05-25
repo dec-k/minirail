@@ -157,13 +157,6 @@
 							aria-hidden="true"
 						></span>
 						<span class="text-sm font-semibold tabular-nums">Loco {loco.id}</span>
-						{#if loco.stopped}
-							<span
-								class="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive"
-							>
-								Derailed
-							</span>
-						{/if}
 					</div>
 
 					<div class="flex items-center gap-2">

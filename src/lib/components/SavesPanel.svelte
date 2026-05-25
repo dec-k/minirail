@@ -255,7 +255,7 @@
 			<Separator class="my-3" />
 			<div class="flex flex-col gap-1.5">
 				<div class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-					Saved layouts
+					My Tracks
 				</div>
 				<div class="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">
 					{#each entries as entry (entry.key)}

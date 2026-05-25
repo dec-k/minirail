@@ -185,6 +185,69 @@
 	};
 	let draw: DrawState | null = null;
 
+	// View transform. Applied as a CSS transform on a wrapper around the SVG so
+	// the SVG's getScreenCTM() resolves pointer coords back to grid cells with
+	// no extra math here.
+	let zoom = $state(1);
+	let panX = $state(0);
+	let panY = $state(0);
+
+	type PanState = {
+		pointerId: number;
+		startX: number;
+		startY: number;
+		origPanX: number;
+		origPanY: number;
+	};
+	let pan: PanState | null = $state(null);
+
+	const MIN_ZOOM = 0.25;
+	const MAX_ZOOM = 4;
+
+	function handleWheel(e: WheelEvent) {
+		e.preventDefault();
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const cx = e.clientX - rect.left;
+		const cy = e.clientY - rect.top;
+		// Anchor the zoom on the world point under the cursor: it should stay
+		// pinned to the cursor as zoom changes.
+		const wx = (cx - panX) / zoom;
+		const wy = (cy - panY) / zoom;
+		const factor = Math.exp(-e.deltaY * 0.0015);
+		const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
+		zoom = next;
+		panX = cx - wx * next;
+		panY = cy - wy * next;
+	}
+
+	function handlePanDown(e: PointerEvent) {
+		// Middle-mouse drag pans. Left button is owned by the active tool; right
+		// button is left alone for native browser menus.
+		if (e.button !== 1) return;
+		e.preventDefault();
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		pan = {
+			pointerId: e.pointerId,
+			startX: e.clientX,
+			startY: e.clientY,
+			origPanX: panX,
+			origPanY: panY
+		};
+	}
+
+	function handlePanMove(e: PointerEvent) {
+		if (!pan || e.pointerId !== pan.pointerId) return;
+		panX = pan.origPanX + (e.clientX - pan.startX);
+		panY = pan.origPanY + (e.clientY - pan.startY);
+	}
+
+	function handlePanUp(e: PointerEvent) {
+		if (!pan || e.pointerId !== pan.pointerId) return;
+		const el = e.currentTarget as HTMLElement;
+		if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+		pan = null;
+	}
+
 	// Paint state for the decorate tool. A pointerup with `moved=false` toggles
 	// the start cell (same as a click); a drag paints every cell crossed using
 	// set semantics (never toggles off).
@@ -361,7 +424,21 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="absolute inset-0 overflow-auto bg-board-bg">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="absolute inset-0 overflow-hidden bg-board-bg"
+	class:cursor-grabbing={pan !== null}
+	onwheel={handleWheel}
+	onpointerdown={handlePanDown}
+	onpointermove={handlePanMove}
+	onpointerup={handlePanUp}
+	onpointercancel={handlePanUp}
+	onauxclick={(e) => e.preventDefault()}
+>
+<div
+	class="absolute top-0 left-0 origin-top-left"
+	style="transform: translate({panX}px, {panY}px) scale({zoom})"
+>
 	<svg
 		viewBox="0 0 {widthPx} {heightPx}"
 		width={widthPx}
@@ -872,6 +949,7 @@
 			</g>
 		{/each}
 	</svg>
+</div>
 </div>
 
 <style>

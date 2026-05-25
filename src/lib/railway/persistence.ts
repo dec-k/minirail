@@ -199,26 +199,35 @@ export function parseLayout(json: string): SavedLayout {
 	};
 }
 
-export type SavedEntry = { name: string; savedAt: number };
+// `key` is the localStorage key suffix (the part after STORAGE_PREFIX) — the
+// only stable identifier for a saved entry. `name` is the human label from the
+// JSON body and may collide across entries (older saves, manual edits).
+export type SavedEntry = { key: string; name: string; savedAt: number };
 
 export function listLocalSaves(): SavedEntry[] {
 	if (!browser) return [];
-	const out: SavedEntry[] = [];
+	// Dedupe defensively by storage key. localStorage already enforces unique
+	// keys, but the each-block consumer crashes hard on key collisions, so
+	// guarantee uniqueness at the source.
+	const seen = new Map<string, SavedEntry>();
 	for (let i = 0; i < localStorage.length; i++) {
 		const k = localStorage.key(i);
 		if (!k || !k.startsWith(STORAGE_PREFIX)) continue;
 		const raw = localStorage.getItem(k);
 		if (!raw) continue;
+		const suffix = k.slice(STORAGE_PREFIX.length);
 		try {
 			const parsed = JSON.parse(raw) as Partial<SavedLayout>;
-			out.push({
-				name: parsed.name ?? k.slice(STORAGE_PREFIX.length),
+			seen.set(suffix, {
+				key: suffix,
+				name: parsed.name ?? suffix,
 				savedAt: parsed.savedAt ?? 0
 			});
 		} catch {
 			// Skip corrupt entries rather than crashing the listing.
 		}
 	}
+	const out = [...seen.values()];
 	out.sort((a, b) => b.savedAt - a.savedAt);
 	return out;
 }
@@ -233,16 +242,16 @@ export function saveLocal(name: string): SavedLayout {
 	return layout;
 }
 
-export function loadLocal(name: string): SavedLayout | null {
+export function loadLocalByKey(key: string): SavedLayout | null {
 	if (!browser) return null;
-	const raw = localStorage.getItem(STORAGE_PREFIX + name);
+	const raw = localStorage.getItem(STORAGE_PREFIX + key);
 	if (!raw) return null;
 	return parseLayout(raw);
 }
 
-export function deleteLocal(name: string) {
+export function deleteLocalByKey(key: string) {
 	if (!browser) return;
-	localStorage.removeItem(STORAGE_PREFIX + name);
+	localStorage.removeItem(STORAGE_PREFIX + key);
 }
 
 // Triggers a browser download of the layout as a .json file. Filename is

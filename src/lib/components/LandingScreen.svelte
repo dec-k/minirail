@@ -4,10 +4,10 @@
 	import { Upload, FolderOpen, Trash2, X, Check, TrainTrack } from 'lucide-svelte';
 	import {
 		listLocalSaves,
-		loadLocal,
+		loadLocalByKey,
 		readLayoutFromFile,
 		applyLayout,
-		deleteLocal,
+		deleteLocalByKey,
 		type SavedEntry
 	} from '$lib/railway/persistence';
 	import { clearAll } from '$lib/railway/grid.svelte';
@@ -51,11 +51,11 @@
 		onstart();
 	}
 
-	function loadEntry(entryName: string) {
+	function loadEntry(entry: SavedEntry) {
 		try {
-			const layout = loadLocal(entryName);
+			const layout = loadLocalByKey(entry.key);
 			if (!layout) {
-				flash('err', `"${entryName}" not found.`);
+				flash('err', `"${entry.name}" not found.`);
 				refresh();
 				return;
 			}
@@ -66,8 +66,8 @@
 		}
 	}
 
-	function deleteEntry(entryName: string) {
-		deleteLocal(entryName);
+	function deleteEntry(key: string) {
+		deleteLocalByKey(key);
 		refresh();
 	}
 
@@ -155,14 +155,14 @@
 					Local Saves
 				</div>
 				<div class="flex flex-col gap-1.5">
-					{#each entries as entry (entry.name)}
+					{#each entries as entry (entry.key)}
 						<div
 							class="flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 py-2"
 						>
 							<button
 								type="button"
 								class="flex min-w-0 flex-1 flex-col text-left transition-colors hover:text-foreground"
-								onclick={() => loadEntry(entry.name)}
+								onclick={() => loadEntry(entry)}
 							>
 								<span class="truncate text-sm font-medium">{entry.name}</span>
 								{#if entry.savedAt}
@@ -172,7 +172,7 @@
 							<Button
 								variant="outline"
 								size="sm"
-								onclick={() => loadEntry(entry.name)}
+								onclick={() => loadEntry(entry)}
 								title="Load this layout"
 							>
 								<FolderOpen />
@@ -182,7 +182,7 @@
 								variant="ghost"
 								size="icon-sm"
 								class="text-muted-foreground hover:text-destructive"
-								onclick={() => deleteEntry(entry.name)}
+								onclick={() => deleteEntry(entry.key)}
 								aria-label="Delete {entry.name}"
 								title="Delete"
 							>

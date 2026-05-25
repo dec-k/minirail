@@ -487,35 +487,12 @@ function distanceToDeadEnd(loco: Loco, maxDist: number): number {
 	return Infinity;
 }
 
-// True when the leader (loco forward / rear wagon when reversing) is sitting
-// exactly at the boundary of its current tile with no valid continuation in
-// the motion direction — i.e., the train has arrived at a dead end and can't
-// move further this direction.
-function leaderAtDeadEnd(loco: Loco): boolean {
-	if (loco.reverser === 0) return false;
-	const sign = loco.reverser as 1 | -1;
-	const leader: Vehicle =
-		sign === -1 && loco.wagons.length > 0 ? loco.wagons[loco.wagons.length - 1] : loco;
-	const piece = getPiece(leader.x, leader.y);
-	if (!piece) return true;
-	const paths = pathsOf(piece);
-	const path = paths[leader.pathIdx];
-	if (!path) return true;
-	const effDir = (leader.dir * sign) as 1 | -1;
-	const atBoundary = effDir === 1 ? leader.t >= 1 - 1e-6 : leader.t <= 1e-6;
-	if (!atBoundary) return false;
-	const exitDir = effDir === 1 ? path.to : path.from;
-	const nx = leader.x + dx[exitDir];
-	const ny = leader.y + dy[exitDir];
-	const nextPiece = getPiece(nx, ny);
-	if (!nextPiece) return true;
-	const entryDir = opposite(exitDir);
-	const nextPaths = pathsOf(nextPiece);
-	for (let i = 0; i < nextPaths.length; i++) {
-		if (nextPaths[i].from === entryDir || nextPaths[i].to === entryDir) return false;
-	}
-	return true;
-}
+// Distance below which the leader is considered "at" a dead end. The braking
+// target shrinks linearly with distance to obstacle, so the train decelerates
+// geometrically as it approaches a wall — it never quite reaches t=1. Snapping
+// within this radius lets auto-reverse flip promptly instead of crawling for
+// seconds; at 0.05 of a tile (2px at the default zoom) the gap is invisible.
+const DEAD_END_SNAP = 0.05;
 
 // Read-only walk forward along the loco's intended route. Returns the distance
 // (in tile units) from this train's leading vehicle (loco when going forward,
@@ -708,18 +685,18 @@ function makeSwitchLineCallback(): (x: number, y: number) => void {
 	};
 }
 
-// Resolve any dead-end / derailed state for `l` before this frame's motion is
-// computed. Returns true if the loco was neutralised or auto-reversed and the
-// caller should skip motion for this frame. Covers two cases:
-//   1. The leader has come to rest at the end of a stub track (via lookahead).
+// Resolve any dead-end / derailed state for `l` for this frame. Returns true
+// if the loco was neutralised or auto-reversed and the caller should skip
+// motion for this frame. Covers two cases:
+//   1. The leader is within DEAD_END_SNAP of the wall (via lookahead).
 //   2. step() set the stopped flag on some car after the track was removed
 //      under the train.
 // With auto-reverse on, the train flips and continues; otherwise the reverser
 // drops to neutral so the train doesn't sit pushing against a wall.
-function resolveDeadEnd(l: Loco): boolean {
+function resolveDeadEnd(l: Loco, distToDeadEnd: number): boolean {
 	if (l.reverser === 0) return false;
 	const someStopped = l.stopped || l.wagons.some((w) => w.stopped);
-	if (!someStopped && !leaderAtDeadEnd(l)) return false;
+	if (!someStopped && distToDeadEnd > DEAD_END_SNAP) return false;
 	const sign = l.reverser as 1 | -1;
 	l.stopped = false;
 	for (const w of l.wagons) w.stopped = false;
@@ -748,8 +725,6 @@ function loop() {
 			continue;
 		}
 
-		if (resolveDeadEnd(l)) continue;
-
 		// Look ahead far enough to drive both the braking target (within
 		// APPROACH_DIST) and the hard overshoot cap on this frame's motion.
 		const frameDist = l.speed * dt;
@@ -759,6 +734,9 @@ function loop() {
 		const distToVehicle =
 			distToVehicleRaw === Infinity ? Infinity : Math.max(0, distToVehicleRaw - WAGON_LENGTH);
 		const distToDeadEnd = distanceToDeadEnd(l, lookahead);
+
+		if (resolveDeadEnd(l, distToDeadEnd)) continue;
+
 		const distToObstacle = Math.min(distToStop, distToVehicle, distToDeadEnd);
 
 		// Target speed: throttle when powered, attenuated linearly as we close

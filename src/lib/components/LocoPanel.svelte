@@ -27,6 +27,8 @@
 		ChevronDown,
 		Train
 	} from 'lucide-svelte';
+	import { slide } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 
 	type Icon = typeof Minus;
 
@@ -49,7 +51,19 @@
 </script>
 
 {#if sim.locos.length > 0}
+	<!--
+		Grid stacking pins both collapsed/expanded branches to the same bottom-
+		center anchor so the parent's `-translate-x-1/2 left-1/2` centering does
+		not jump when one branch's content width differs from the other's
+		during the transition overlap.
+	-->
+	<div class="grid items-end justify-items-center">
 	{#if collapsed}
+		<div
+			class="col-start-1 row-start-1"
+			in:slide={{ duration: 180, easing: cubicOut, axis: 'y' }}
+			out:slide={{ duration: 140, easing: cubicOut, axis: 'y' }}
+		>
 		<Button
 			variant="default"
 			size="icon"
@@ -67,7 +81,13 @@
 				</span>
 			{/if}
 		</Button>
+		</div>
 	{:else}
+		<div
+			class="col-start-1 row-start-1"
+			in:slide={{ duration: 220, easing: cubicOut, axis: 'y' }}
+			out:slide={{ duration: 160, easing: cubicOut, axis: 'y' }}
+		>
 		<Card class="flex max-h-[40vh] flex-col gap-2 overflow-y-auto p-2">
 			<div class="-mb-1 flex justify-end">
 				<Button
@@ -182,5 +202,7 @@
 			</div>
 		{/each}
 		</Card>
+		</div>
 	{/if}
+	</div>
 {/if}

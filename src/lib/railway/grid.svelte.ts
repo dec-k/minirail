@@ -32,6 +32,11 @@ export const grid = $state({
 	groundOvers: new SvelteMap<string, Decoration>()
 });
 
+// Bulk loaders (save/restore, templates) flip `suppressIntro` so the per-tile
+// snap-in transition does not fire dozens of times when a whole layout drops in
+// at once.
+export const placementFx = $state({ suppressIntro: false });
+
 export function getPiece(x: number, y: number): Piece | undefined {
 	return grid.cells.get(cellKey(x, y));
 }

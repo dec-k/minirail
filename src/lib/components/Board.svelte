@@ -10,8 +10,11 @@
 		toggleStationAt,
 		placeDecoration,
 		setDecoration,
-		getDecoration
+		getDecoration,
+		placementFx
 	} from '$lib/railway/grid.svelte';
+	import { scale } from 'svelte/transition';
+	import { backOut } from 'svelte/easing';
 	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { svgPathD, sample } from '$lib/railway/geometry';
@@ -150,6 +153,14 @@
 			if (p.from === 1 || p.from === 3 || p.to === 1 || p.to === 3) return 'south';
 		}
 		return 'east';
+	}
+
+	// Snap a freshly placed tile in with a small overshoot. Returns a no-op when
+	// `placementFx.suppressIntro` is set (bulk loads via applyLayout) so the
+	// transition doesn't fire dozens of times at once.
+	function placeIntro(node: SVGElement) {
+		if (placementFx.suppressIntro) return {};
+		return scale(node, { start: 0.7, opacity: 0.4, duration: 220, easing: backOut });
 	}
 
 	function darken(hex: string): string {
@@ -511,6 +522,10 @@
 
 		{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
 			<g transform="translate({x * TILE} {y * TILE})">
+				<g
+					in:placeIntro|local
+					style="transform-box: fill-box; transform-origin: center;"
+				>
 				{#if groundOver.kind === 'grass'}
 					<rect width={TILE} height={TILE} fill="#9dd07a" />
 					{#each grassTufts(x, y) as tuft, i (i)}
@@ -536,11 +551,16 @@
 						/>
 					{/each}
 				{/if}
+				</g>
 			</g>
 		{/each}
 
 		{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
 			<g transform="translate({x * TILE} {y * TILE})">
+				<g
+					in:placeIntro|local
+					style="transform-box: fill-box; transform-origin: center;"
+				>
 				{#if decoration.kind === 'water'}
 					{@const nN = getDecoration(x, y - 1)?.kind === 'water'}
 					{@const nE = getDecoration(x + 1, y)?.kind === 'water'}
@@ -683,6 +703,7 @@
 						/>
 					{/each}
 				{/if}
+				</g>
 			</g>
 		{/each}
 
@@ -693,6 +714,10 @@
 				.map((p, i) => ({ p, i, inactive: switchTile && i !== activeIdx }))
 				.sort((a, b) => Number(b.inactive) - Number(a.inactive))}
 			<g transform="translate({x * TILE} {y * TILE})">
+				<g
+					in:placeIntro|local
+					style="transform-box: fill-box; transform-origin: center;"
+				>
 				<rect width={TILE} height={TILE} class="fill-foreground/3" />
 				{#each ordered as { p, i, inactive } (i)}
 					<path
@@ -740,6 +765,7 @@
 						class="fill-switch-marker"
 					/>
 				{/if}
+				</g>
 			</g>
 		{/each}
 

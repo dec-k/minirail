@@ -18,6 +18,8 @@
 		CornerDownRight,
 		CornerDownLeft
 	} from 'lucide-svelte';
+	import { slide, fade } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
 	type Icon = typeof Pencil;
@@ -66,20 +68,32 @@
 	</Card>
 
 	{#if tool === 'decorate'}
-		<Card class="p-1.5">
-			<ToggleGroup.Root
-				type="single"
-				value={decorationKind}
-				onValueChange={(v) => v && (decorationKind = v as DecorationKind)}
-				aria-label="Select scenery kind"
-				class="flex-col border-none bg-transparent p-0"
-			>
-				{#each decorationOptions as d (d.id)}
-					<ToggleGroup.Item value={d.id} aria-label={d.label} title={d.label} class="size-9 p-0">
-						<d.icon class="size-4" />
-					</ToggleGroup.Item>
-				{/each}
-			</ToggleGroup.Root>
-		</Card>
+		<div
+			in:slide={{ duration: 200, easing: cubicOut, axis: 'x' }}
+			out:slide={{ duration: 140, easing: cubicOut, axis: 'x' }}
+		>
+			<div in:fade={{ duration: 180, delay: 40 }} out:fade={{ duration: 100 }}>
+				<Card class="p-1.5">
+					<ToggleGroup.Root
+						type="single"
+						value={decorationKind}
+						onValueChange={(v) => v && (decorationKind = v as DecorationKind)}
+						aria-label="Select scenery kind"
+						class="flex-col border-none bg-transparent p-0"
+					>
+						{#each decorationOptions as d (d.id)}
+							<ToggleGroup.Item
+								value={d.id}
+								aria-label={d.label}
+								title={d.label}
+								class="size-9 p-0"
+							>
+								<d.icon class="size-4" />
+							</ToggleGroup.Item>
+						{/each}
+					</ToggleGroup.Root>
+				</Card>
+			</div>
+		</div>
 	{/if}
 </div>

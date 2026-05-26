@@ -1,5 +1,13 @@
 import { browser } from '$app/environment';
-import { grid, clearAll, resize, setPiece, setStation, setDecoration } from './grid.svelte';
+import {
+	grid,
+	clearAll,
+	resize,
+	setPiece,
+	setStation,
+	setDecoration,
+	placementFx
+} from './grid.svelte';
 import { sim, replaceLocos, clearAllLocos, type SavedLocoState } from './sim.svelte';
 import {
 	DECORATION_KINDS,
@@ -88,6 +96,10 @@ export function serializeLayout(name: string): SavedLayout {
 }
 
 export function applyLayout(layout: SavedLayout) {
+	// Suppress the per-tile snap-in transition while bulk-restoring; a freshly
+	// loaded layout otherwise plays the placement animation dozens of times at
+	// once. Re-enabled after the current render flush.
+	placementFx.suppressIntro = true;
 	clearAllLocos();
 	clearAll();
 	resize(layout.grid.width, layout.grid.height);
@@ -100,6 +112,13 @@ export function applyLayout(layout: SavedLayout) {
 	for (const s of layout.grid.stations) setStation(s.x, s.y);
 	for (const d of layout.grid.decorations) setDecoration(d.x, d.y, d.kind);
 	replaceLocos(layout.locos);
+	if (browser) {
+		requestAnimationFrame(() => {
+			placementFx.suppressIntro = false;
+		});
+	} else {
+		placementFx.suppressIntro = false;
+	}
 }
 
 const VALID_KINDS: PieceKind[] = ['straight', 'curve', 'switch-left', 'switch-right'];

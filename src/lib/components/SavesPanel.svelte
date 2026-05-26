@@ -16,8 +16,8 @@
 	import {
 		saveLocal,
 		listLocalSaves,
-		loadLocal,
-		deleteLocal,
+		loadLocalByKey,
+		deleteLocalByKey,
 		downloadLayout,
 		readLayoutFromFile,
 		applyLayout,
@@ -74,31 +74,31 @@
 		}
 	}
 
-	function handleLoad(entryName: string) {
+	function handleLoad(entry: SavedEntry) {
 		try {
-			const layout = loadLocal(entryName);
+			const layout = loadLocalByKey(entry.key);
 			if (!layout) {
-				flash('err', `"${entryName}" not found.`);
+				flash('err', `"${entry.name}" not found.`);
 				return;
 			}
 			applyLayout(layout);
-			flash('ok', `Loaded "${entryName}".`);
+			flash('ok', `Loaded "${entry.name}".`);
 		} catch (err) {
 			flash('err', err instanceof Error ? err.message : 'Load failed.');
 		}
 	}
 
-	function handleDelete(entryName: string) {
-		deleteLocal(entryName);
+	function handleDelete(entry: SavedEntry) {
+		deleteLocalByKey(entry.key);
 		refresh();
-		flash('ok', `Deleted "${entryName}".`);
+		flash('ok', `Deleted "${entry.name}".`);
 	}
 
-	function handleDownload(entryName: string) {
+	function handleDownload(entry: SavedEntry) {
 		try {
-			const layout = loadLocal(entryName);
+			const layout = loadLocalByKey(entry.key);
 			if (!layout) {
-				flash('err', `"${entryName}" not found.`);
+				flash('err', `"${entry.name}" not found.`);
 				return;
 			}
 			downloadLayout(layout);
@@ -153,7 +153,7 @@
 <Popover.Root bind:open>
 	<Popover.Trigger>
 		{#snippet child({ props })}
-			<Button variant="outline" size="sm" {...props}>
+			<Button variant="ghost" size="sm" class="w-full justify-start" {...props}>
 				<Save />
 				Saves
 			</Button>
@@ -162,7 +162,7 @@
 	<Popover.Content class="w-96">
 		<div class="flex flex-col gap-2">
 			<div class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-				Save Railway
+				Save
 			</div>
 			<div class="flex flex-wrap items-center gap-2">
 				<input
@@ -177,26 +177,6 @@
 				<Button size="sm" onclick={handleSave}>
 					<Save />
 					Save
-				</Button>
-			</div>
-			<div class="flex flex-wrap items-center gap-2">
-				<Button
-					variant="outline"
-					size="sm"
-					onclick={handleDownloadCurrent}
-					title="Download current layout as JSON"
-				>
-					<Download />
-					Download
-				</Button>
-				<Button
-					variant="outline"
-					size="sm"
-					onclick={handleCopyCurrent}
-					title="Copy current layout JSON to clipboard"
-				>
-					<Copy />
-					Copy JSON
 				</Button>
 			</div>
 		</div>
@@ -275,10 +255,10 @@
 			<Separator class="my-3" />
 			<div class="flex flex-col gap-1.5">
 				<div class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-					Saved layouts
+					My Tracks
 				</div>
 				<div class="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">
-					{#each entries as entry (entry.name)}
+					{#each entries as entry (entry.key)}
 						<div
 							class="flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5"
 						>
@@ -291,7 +271,7 @@
 							<Button
 								variant="outline"
 								size="icon-sm"
-								onclick={() => handleLoad(entry.name)}
+								onclick={() => handleLoad(entry)}
 								aria-label="Load {entry.name}"
 								title="Load this layout"
 							>
@@ -300,7 +280,7 @@
 							<Button
 								variant="outline"
 								size="icon-sm"
-								onclick={() => handleDownload(entry.name)}
+								onclick={() => handleDownload(entry)}
 								aria-label="Download {entry.name}"
 								title="Download as JSON"
 							>
@@ -310,7 +290,7 @@
 								variant="ghost"
 								size="icon-sm"
 								class="text-muted-foreground hover:text-destructive"
-								onclick={() => handleDelete(entry.name)}
+								onclick={() => handleDelete(entry)}
 								aria-label="Delete {entry.name}"
 								title="Delete"
 							>

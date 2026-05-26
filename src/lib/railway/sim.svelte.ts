@@ -14,6 +14,7 @@ import { pathsOf } from './pieces';
 import { pathLength, sample } from './geometry';
 import { getPiece, grid, toggleAt } from './grid.svelte';
 import { hasActiveParticles, spawnSteam, tickParticles } from './particles.svelte';
+import { SvelteMap } from 'svelte/reactivity';
 
 export type { Reverser };
 
@@ -45,14 +46,14 @@ let nextLocoId = 1;
 // Seconds between steam puffs from a moving loco. Per-loco accumulator carried
 // in steamTimers so multiple locos don't share phase.
 const STEAM_INTERVAL = 0.09;
-const steamTimers = new Map<number, number>();
+const steamTimers = new SvelteMap<number, number>();
 
 function maybeSpawnSteam(l: Loco, dt: number) {
 	if (!locoIsMoving(l)) {
 		steamTimers.delete(l.id);
 		return;
 	}
-	let timer = (steamTimers.get(l.id) ?? 0) + dt;
+	const timer = (steamTimers.get(l.id) ?? 0) + dt;
 	if (timer < STEAM_INTERVAL) {
 		steamTimers.set(l.id, timer);
 		return;

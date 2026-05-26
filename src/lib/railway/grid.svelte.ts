@@ -20,8 +20,8 @@ import {
 } from './pieces';
 
 export const grid = $state({
-	width: 20,
-	height: 15,
+	width: 40,
+	height: 30,
 	cells: new SvelteMap<string, Piece>(),
 	stations: new SvelteMap<string, Station>(),
 	// Decorations that occupy empty cells exclusively (tree, building, water).
@@ -31,6 +31,11 @@ export const grid = $state({
 	// any cell contents.
 	groundOvers: new SvelteMap<string, Decoration>()
 });
+
+// Bulk loaders (save/restore, templates) flip `suppressIntro` so the per-tile
+// snap-in transition does not fire dozens of times when a whole layout drops in
+// at once.
+export const placementFx = $state({ suppressIntro: false });
 
 export function getPiece(x: number, y: number): Piece | undefined {
 	return grid.cells.get(cellKey(x, y));

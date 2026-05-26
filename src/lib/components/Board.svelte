@@ -420,13 +420,56 @@
 			return { x, y, groundOver };
 		})
 	);
+
+	// Canvas-based particle renderer. Sits above the SVG inside the same
+	// transformed wrapper so pan/zoom are inherited for free. Driven by a local
+	// rAF that runs only while particles exist (or to clear one final frame).
+	let canvasEl: HTMLCanvasElement | undefined = $state();
+
+	function drawParticles(ctx: CanvasRenderingContext2D) {
+		ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+		for (const p of particles.list) {
+			const t = Math.min(1, p.life / p.maxLife);
+			const cx = p.x * TILE;
+			const cy = p.y * TILE;
+			const r = (0.1 + t * 0.22) * TILE;
+			const alpha = (1 - t) * 0.55;
+			const tint = Math.floor(255 - t * 50);
+			const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+			grad.addColorStop(0, `rgba(${tint},${tint},${tint},${alpha})`);
+			grad.addColorStop(0.5, `rgba(${tint},${tint},${tint},${alpha * 0.45})`);
+			grad.addColorStop(1, `rgba(${tint},${tint},${tint},0)`);
+			ctx.fillStyle = grad;
+			ctx.beginPath();
+			ctx.arc(cx, cy, r, 0, Math.PI * 2);
+			ctx.fill();
+		}
+	}
+
+	$effect(() => {
+		if (!canvasEl) return;
+		const ctx = canvasEl.getContext('2d');
+		if (!ctx) return;
+		let raf = 0;
+		let lastDrewCount = 0;
+		const frame = () => {
+			const n = particles.list.length;
+			if (n > 0 || lastDrewCount > 0) {
+				drawParticles(ctx);
+				lastDrewCount = n;
+			}
+			raf = requestAnimationFrame(frame);
+		};
+		raf = requestAnimationFrame(frame);
+		return () => cancelAnimationFrame(raf);
+	});
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	class="absolute inset-0 overflow-hidden bg-board-bg"
+	class="absolute inset-0 overflow-hidden bg-background"
 	class:cursor-grabbing={pan !== null}
 	onwheel={handleWheel}
 	onpointerdown={handlePanDown}
@@ -436,7 +479,7 @@
 	onauxclick={(e) => e.preventDefault()}
 >
 <div
-	class="absolute top-0 left-0 origin-top-left"
+	class="absolute top-0 left-0 origin-top-left overflow-hidden rounded-lg bg-board-bg shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
 	style="transform: translate({panX}px, {panY}px) scale({zoom})"
 >
 	<svg
@@ -911,17 +954,21 @@
 			</g>
 		{/each}
 
-		{#each particles.list as p (p.id)}
-			{@const t = Math.min(1, p.life / p.maxLife)}
-			<circle
-				cx={p.x * TILE}
-				cy={p.y * TILE}
-				r={(0.06 + t * 0.12) * TILE}
-				fill="#ffffff"
-				fill-opacity={(1 - t) * 0.65}
-			/>
-		{/each}
-
+	</svg>
+	<canvas
+		bind:this={canvasEl}
+		width={widthPx}
+		height={heightPx}
+		class="pointer-events-none absolute top-0 left-0"
+		style="width: {widthPx}px; height: {heightPx}px;"
+	></canvas>
+	<svg
+		viewBox="0 0 {widthPx} {heightPx}"
+		width={widthPx}
+		height={heightPx}
+		class="pointer-events-none absolute top-0 left-0 block select-none"
+		role="presentation"
+	>
 		{#each locoBadges as b (b.key)}
 			<g transform="translate({b.x} {b.y - TILE * 0.45})">
 				<rect

@@ -7,9 +7,10 @@
 	import LandingScreen from '$lib/components/LandingScreen.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
+	import * as Popover from '$lib/components/ui/popover';
 	import { clearAll } from '$lib/railway/grid.svelte';
 	import { clearAllLocos } from '$lib/railway/sim.svelte';
-	import { Trash2 } from 'lucide-svelte';
+	import { Menu, Trash2 } from 'lucide-svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import type { DecorationKind, PieceKind } from '$lib/railway/types';
@@ -17,10 +18,12 @@
 	let tool: PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' = $state('draw');
 	let decorationKind: DecorationKind = $state('tree');
 	let started = $state(false);
+	let menuOpen = $state(false);
 
 	function clearBoard() {
 		clearAllLocos();
 		clearAll();
+		menuOpen = false;
 	}
 </script>
 
@@ -45,23 +48,41 @@
 		</div>
 
 		<div
-			class="pointer-events-auto absolute top-4 right-4 flex items-center gap-1 rounded-xl border border-border bg-card/90 px-2 py-1.5 shadow-md backdrop-blur"
+			class="pointer-events-auto absolute top-4 right-4"
 			in:fly={{ y: -12, duration: 450, delay: 400, easing: cubicOut }}
 		>
-			<SavesPanel />
-			<Separator orientation="vertical" class="h-5!" />
-			<Button
-				variant="ghost"
-				size="sm"
-				onclick={clearBoard}
-				title="Clear board"
-				class="text-muted-foreground hover:text-destructive"
-			>
-				<Trash2 />
-				Clear
-			</Button>
-			<Separator orientation="vertical" class="h-5!" />
-			<ThemeToggle />
+			<Popover.Root bind:open={menuOpen}>
+				<Popover.Trigger>
+					{#snippet child({ props })}
+						<Button
+							variant="outline"
+							size="sm"
+							{...props}
+							class="rounded-xl border-border bg-card/90 shadow-md backdrop-blur"
+						>
+							<Menu />
+							Menu
+						</Button>
+					{/snippet}
+				</Popover.Trigger>
+				<Popover.Content class="w-48 p-1.5">
+					<div class="flex flex-col gap-1">
+						<SavesPanel />
+						<Separator />
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={clearBoard}
+							class="w-full justify-start text-muted-foreground hover:text-destructive"
+						>
+							<Trash2 />
+							Clear board
+						</Button>
+						<Separator />
+						<ThemeToggle />
+					</div>
+				</Popover.Content>
+			</Popover.Root>
 		</div>
 
 		<div

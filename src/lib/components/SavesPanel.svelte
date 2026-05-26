@@ -153,7 +153,7 @@
 <Popover.Root bind:open>
 	<Popover.Trigger>
 		{#snippet child({ props })}
-			<Button variant="outline" size="sm" {...props}>
+			<Button variant="ghost" size="sm" class="w-full justify-start" {...props}>
 				<Save />
 				Saves
 			</Button>

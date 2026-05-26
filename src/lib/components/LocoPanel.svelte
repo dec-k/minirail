@@ -23,7 +23,9 @@
 		Square,
 		X,
 		Repeat,
-		Shuffle
+		Shuffle,
+		ChevronDown,
+		Train
 	} from 'lucide-svelte';
 
 	type Icon = typeof Minus;
@@ -33,10 +35,51 @@
 		{ id: 0, label: 'Neutral', icon: Square },
 		{ id: 1, label: 'Forward', icon: ChevronsRight }
 	];
+
+	let collapsed = $state(false);
+	let prevCount = 0;
+
+	// Auto-expand on the 0→1 transition so a freshly placed loco isn't hidden
+	// under the train-icon stub. User-driven collapse otherwise persists.
+	$effect(() => {
+		const n = sim.locos.length;
+		if (prevCount === 0 && n > 0) collapsed = false;
+		prevCount = n;
+	});
 </script>
 
 {#if sim.locos.length > 0}
-	<Card class="flex max-h-[40vh] flex-col gap-2 overflow-y-auto p-2">
+	{#if collapsed}
+		<Button
+			variant="default"
+			size="icon"
+			class="relative size-12 rounded-full shadow-md"
+			onclick={() => (collapsed = false)}
+			title="Show loco controls"
+			aria-label="Show loco controls"
+		>
+			<Train class="size-5" />
+			{#if sim.locos.length > 1}
+				<span
+					class="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-background px-1 text-xs font-semibold text-foreground tabular-nums ring-1 ring-border"
+				>
+					{sim.locos.length}
+				</span>
+			{/if}
+		</Button>
+	{:else}
+		<Card class="flex max-h-[40vh] flex-col gap-2 overflow-y-auto p-2">
+			<div class="-mb-1 flex justify-end">
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					onclick={() => (collapsed = true)}
+					title="Collapse panel"
+					aria-label="Collapse loco panel"
+				>
+					<ChevronDown />
+				</Button>
+			</div>
 		{#each sim.locos as loco (loco.id)}
 			<div
 				class="flex flex-wrap items-center gap-3 rounded-lg border border-border/70 bg-muted/40 px-3 py-2"
@@ -138,5 +181,6 @@
 				</Button>
 			</div>
 		{/each}
-	</Card>
+		</Card>
+	{/if}
 {/if}

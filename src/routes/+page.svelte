@@ -10,6 +10,8 @@
 	import { clearAll } from '$lib/railway/grid.svelte';
 	import { clearAllLocos } from '$lib/railway/sim.svelte';
 	import { Trash2 } from 'lucide-svelte';
+	import { fade, fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import type { DecorationKind, PieceKind } from '$lib/railway/types';
 
 	let tool: PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' = $state('draw');
@@ -25,10 +27,16 @@
 {#if !started}
 	<LandingScreen onstart={() => (started = true)} />
 {:else}
-	<div class="fixed inset-0 overflow-hidden bg-board-bg text-foreground">
+	<div
+		class="fixed inset-0 overflow-hidden bg-board-bg text-foreground"
+		in:fade={{ duration: 500, delay: 150, easing: cubicOut }}
+	>
 		<Board {tool} {decorationKind} />
 
-		<div class="pointer-events-none absolute top-4 left-4">
+		<div
+			class="pointer-events-none absolute top-4 left-4"
+			in:fly={{ y: -12, duration: 450, delay: 350, easing: cubicOut }}
+		>
 			<h1
 				class="bg-linear-to-br from-foreground to-foreground/60 bg-clip-text font-display text-2xl tracking-tight text-transparent drop-shadow-sm"
 			>
@@ -38,6 +46,7 @@
 
 		<div
 			class="pointer-events-auto absolute top-4 right-4 flex items-center gap-1 rounded-xl border border-border bg-card/90 px-2 py-1.5 shadow-md backdrop-blur"
+			in:fly={{ y: -12, duration: 450, delay: 400, easing: cubicOut }}
 		>
 			<SavesPanel />
 			<Separator orientation="vertical" class="h-5!" />
@@ -55,12 +64,16 @@
 			<ThemeToggle />
 		</div>
 
-		<div class="pointer-events-auto absolute top-1/2 left-4 -translate-y-1/2">
+		<div
+			class="pointer-events-auto absolute top-1/2 left-4 -translate-y-1/2"
+			in:fly={{ x: -16, duration: 500, delay: 450, easing: cubicOut }}
+		>
 			<ToolPalette bind:tool bind:decorationKind />
 		</div>
 
 		<div
 			class="pointer-events-auto absolute bottom-4 left-1/2 max-w-[min(96vw,72rem)] -translate-x-1/2"
+			in:fly={{ y: 16, duration: 500, delay: 500, easing: cubicOut }}
 		>
 			<LocoPanel />
 		</div>

@@ -2,6 +2,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card } from '$lib/components/ui/card';
 	import { Upload, FolderOpen, Trash2, X, Check, TrainTrack } from 'lucide-svelte';
+	import { fade, fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import {
 		listLocalSaves,
 		loadLocalByKey,
@@ -88,9 +90,14 @@
 
 <div
 	class="min-h-screen bg-linear-to-b from-background via-background to-muted/40 px-6 py-16 text-foreground"
+	in:fade={{ duration: 500, easing: cubicOut }}
+	out:fade={{ duration: 250, easing: cubicOut }}
 >
 	<div class="mx-auto flex max-w-2xl flex-col gap-8">
-		<header class="flex flex-col gap-3 text-center">
+		<header
+			class="flex flex-col gap-3 text-center"
+			in:fly={{ y: -16, duration: 600, delay: 100, easing: cubicOut }}
+		>
 			<h1
 				class="bg-linear-to-br from-foreground to-foreground/60 bg-clip-text font-display text-6xl tracking-tight text-transparent"
 			>
@@ -99,7 +106,10 @@
 			<p class="text-base text-muted-foreground">a super-simple railway sandbox</p>
 		</header>
 
-		<div class="flex flex-col gap-3 text-sm leading-relaxed text-muted-foreground">
+		<div
+			class="flex flex-col gap-3 text-sm leading-relaxed text-muted-foreground"
+			in:fade={{ duration: 500, delay: 250, easing: cubicOut }}
+		>
 			<p>
 				Create a track using the toolbar, then place a <span class="font-medium text-foreground"
 					>Locomotive</span
@@ -114,7 +124,10 @@
 			</p>
 		</div>
 
-		<div class="flex flex-col gap-3 sm:flex-row">
+		<div
+			class="flex flex-col gap-3 sm:flex-row"
+			in:fly={{ y: 12, duration: 500, delay: 400, easing: cubicOut }}
+		>
 			<Button size="lg" class="flex-1 font-bold bg-gradient-to-r from-blue-500 to-purple-500 text-white" onclick={startNew}>
 				<TrainTrack />
 				Create a Track
@@ -150,7 +163,8 @@
 		{/if}
 
 		{#if entries.length > 0}
-			<Card class="p-4">
+			<div in:fade={{ duration: 500, delay: 550, easing: cubicOut }}>
+				<Card class="p-4">
 				<div class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
 					Local Saves
 				</div>
@@ -192,6 +206,7 @@
 					{/each}
 				</div>
 			</Card>
+			</div>
 		{/if}
 	</div>
 </div>

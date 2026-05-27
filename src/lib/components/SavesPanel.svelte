@@ -8,13 +8,15 @@
 		Download,
 		Upload,
 		Trash2,
-		Copy,
 		FileJson,
+		FilePlus,
 		Check,
 		X
 	} from 'lucide-svelte';
 	import {
-		saveLocal,
+		saveAs,
+		saveCurrent,
+		localSaveExists,
 		listLocalSaves,
 		loadLocalByKey,
 		deleteLocalByKey,
@@ -24,23 +26,30 @@
 		serializeLayout,
 		exportToJsonString,
 		parseLayout,
+		newDocument,
 		type SavedEntry
 	} from '$lib/railway/persistence';
+	import { doc } from '$lib/railway/doc.svelte';
 
 	let open = $state(false);
-	let name = $state('');
 	let entries = $state<SavedEntry[]>([]);
 	let message = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
 	let pasteOpen = $state(false);
 	let pasteText = $state('');
+	let saveAsOpen = $state(false);
+	let saveAsName = $state('');
 	let fileInput: HTMLInputElement | null = $state(null);
+	let saveAsInput: HTMLInputElement | null = $state(null);
+
+	$effect(() => {
+		if (saveAsOpen) saveAsInput?.focus();
+	});
 
 	function refresh() {
 		entries = listLocalSaves();
 	}
 
 	$effect(() => {
-		// Refresh on open so the list reflects any saves made elsewhere (e.g. landing screen).
 		if (open) refresh();
 	});
 
@@ -62,26 +71,67 @@
 		});
 	}
 
+	function confirmDiscardIfDirty(action: string): boolean {
+		if (!doc.dirty) return true;
+		return window.confirm(`You have unsaved changes. ${action} anyway?`);
+	}
+
+	function handleNew() {
+		if (!confirmDiscardIfDirty('Start a new track')) return;
+		newDocument();
+		flash('ok', 'New track started.');
+	}
+
 	function handleSave() {
-		const target = name.trim() || `Railway ${new Date().toLocaleString()}`;
+		if (doc.key) {
+			try {
+				saveCurrent(doc.key, doc.name ?? doc.key);
+				refresh();
+				flash('ok', `Saved "${doc.name ?? doc.key}".`);
+			} catch (err) {
+				flash('err', err instanceof Error ? err.message : 'Save failed.');
+			}
+			return;
+		}
+		// Untitled — fall through to Save As.
+		openSaveAs();
+	}
+
+	function openSaveAs() {
+		saveAsName = doc.name ?? '';
+		saveAsOpen = true;
+	}
+
+	function handleSaveAs() {
+		const trimmed = saveAsName.trim();
+		if (!trimmed) {
+			flash('err', 'Name cannot be empty.');
+			return;
+		}
+		if (localSaveExists(trimmed) && trimmed !== doc.key) {
+			const ok = window.confirm(`"${trimmed}" already exists. Overwrite it?`);
+			if (!ok) return;
+		}
 		try {
-			saveLocal(target);
-			name = '';
+			saveAs(trimmed);
+			saveAsOpen = false;
+			saveAsName = '';
 			refresh();
-			flash('ok', `Saved "${target}".`);
+			flash('ok', `Saved "${trimmed}".`);
 		} catch (err) {
 			flash('err', err instanceof Error ? err.message : 'Save failed.');
 		}
 	}
 
 	function handleLoad(entry: SavedEntry) {
+		if (!confirmDiscardIfDirty(`Load "${entry.name}"`)) return;
 		try {
 			const layout = loadLocalByKey(entry.key);
 			if (!layout) {
 				flash('err', `"${entry.name}" not found.`);
 				return;
 			}
-			applyLayout(layout);
+			applyLayout(layout, entry.key);
 			flash('ok', `Loaded "${entry.name}".`);
 		} catch (err) {
 			flash('err', err instanceof Error ? err.message : 'Load failed.');
@@ -89,6 +139,8 @@
 	}
 
 	function handleDelete(entry: SavedEntry) {
+		const ok = window.confirm(`Delete "${entry.name}" permanently?`);
+		if (!ok) return;
 		deleteLocalByKey(entry.key);
 		refresh();
 		flash('ok', `Deleted "${entry.name}".`);
@@ -108,12 +160,12 @@
 	}
 
 	function handleDownloadCurrent() {
-		const target = name.trim() || `Railway ${new Date().toLocaleString()}`;
+		const target = doc.name?.trim() || `Railway ${new Date().toLocaleString()}`;
 		downloadLayout(serializeLayout(target));
 	}
 
 	async function handleCopyCurrent() {
-		const target = name.trim() || `Railway ${new Date().toLocaleString()}`;
+		const target = doc.name?.trim() || `Railway ${new Date().toLocaleString()}`;
 		const json = exportToJsonString(serializeLayout(target));
 		try {
 			await navigator.clipboard.writeText(json);
@@ -128,9 +180,10 @@
 		const file = input.files?.[0];
 		input.value = '';
 		if (!file) return;
+		if (!confirmDiscardIfDirty('Import a file')) return;
 		try {
 			const layout = await readLayoutFromFile(file);
-			applyLayout(layout);
+			applyLayout(layout, null);
 			flash('ok', `Loaded "${layout.name}" from file.`);
 		} catch (err) {
 			flash('err', err instanceof Error ? err.message : 'Import failed.');
@@ -138,9 +191,10 @@
 	}
 
 	function handlePasteImport() {
+		if (!confirmDiscardIfDirty('Import pasted JSON')) return;
 		try {
 			const layout = parseLayout(pasteText);
-			applyLayout(layout);
+			applyLayout(layout, null);
 			pasteOpen = false;
 			pasteText = '';
 			flash('ok', `Loaded "${layout.name}" from pasted JSON.`);
@@ -160,32 +214,86 @@
 		{/snippet}
 	</Popover.Trigger>
 	<Popover.Content class="w-96">
-		<div class="flex flex-col gap-2">
+		<div class="flex flex-col gap-1.5">
 			<div class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-				Save
+				Current track
 			</div>
-			<div class="flex flex-wrap items-center gap-2">
+			<div
+				class="flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5 text-sm"
+			>
+				<span class="min-w-0 flex-1 truncate font-medium">
+					{doc.name ?? 'Untitled track'}
+				</span>
+				{#if doc.dirty}
+					<span
+						class="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium tracking-wide text-amber-700 uppercase dark:text-amber-300"
+					>
+						Unsaved
+					</span>
+				{/if}
+			</div>
+		</div>
+
+		<div class="mt-3 grid grid-cols-3 gap-1.5">
+			<Button size="sm" onclick={handleSave} title={doc.key ? `Save to "${doc.name}"` : 'Save…'}>
+				<Save />
+				Save
+			</Button>
+			<Button variant="outline" size="sm" onclick={openSaveAs}>
+				<FileJson />
+				Save As…
+			</Button>
+			<Button variant="outline" size="sm" onclick={handleNew}>
+				<FilePlus />
+				New
+			</Button>
+		</div>
+
+		{#if saveAsOpen}
+			<div class="mt-2 flex flex-col gap-2 rounded-md border border-border/70 bg-muted/30 p-2">
 				<input
 					type="text"
-					placeholder="Railway name"
-					bind:value={name}
+					placeholder="Track name"
+					bind:value={saveAsName}
+					bind:this={saveAsInput}
 					onkeydown={(e) => {
-						if (e.key === 'Enter') handleSave();
+						if (e.key === 'Enter') handleSaveAs();
+						if (e.key === 'Escape') {
+							saveAsOpen = false;
+							saveAsName = '';
+						}
 					}}
 					class="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 				/>
-				<Button size="sm" onclick={handleSave}>
-					<Save />
-					Save
-				</Button>
+				<div class="flex justify-end gap-2">
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={() => {
+							saveAsOpen = false;
+							saveAsName = '';
+						}}
+					>
+						Cancel
+					</Button>
+					<Button size="sm" onclick={handleSaveAs} disabled={!saveAsName.trim()}>Save</Button>
+				</div>
 			</div>
-		</div>
+		{/if}
 
 		<Separator class="my-3" />
 
 		<div class="flex flex-col gap-2">
-			<div class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Import</div>
+			<div class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Share</div>
 			<div class="flex flex-wrap items-center gap-2">
+				<Button variant="outline" size="sm" onclick={handleDownloadCurrent}>
+					<Download />
+					Download
+				</Button>
+				<Button variant="outline" size="sm" onclick={handleCopyCurrent}>
+					<FileJson />
+					Copy JSON
+				</Button>
 				<Button variant="outline" size="sm" onclick={() => fileInput?.click()}>
 					<Upload />
 					Import file
@@ -255,12 +363,15 @@
 			<Separator class="my-3" />
 			<div class="flex flex-col gap-1.5">
 				<div class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-					My Tracks
+					My tracks
 				</div>
 				<div class="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">
 					{#each entries as entry (entry.key)}
+						{@const isCurrent = entry.key === doc.key}
 						<div
-							class="flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5"
+							class="flex items-center gap-2 rounded-md border px-2.5 py-1.5 {isCurrent
+								? 'border-primary/50 bg-primary/5'
+								: 'border-border/70 bg-muted/40'}"
 						>
 							<div class="flex min-w-0 flex-1 flex-col">
 								<span class="truncate text-sm font-medium">{entry.name}</span>
@@ -273,7 +384,7 @@
 								size="icon-sm"
 								onclick={() => handleLoad(entry)}
 								aria-label="Load {entry.name}"
-								title="Load this layout"
+								title="Load this track"
 							>
 								<FolderOpen />
 							</Button>

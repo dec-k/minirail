@@ -10,6 +10,7 @@
 	import * as Popover from '$lib/components/ui/popover';
 	import { clearAll } from '$lib/railway/grid.svelte';
 	import { clearAllLocos } from '$lib/railway/sim.svelte';
+	import { doc } from '$lib/railway/doc.svelte';
 	import { Menu, Trash2 } from 'lucide-svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
@@ -37,7 +38,7 @@
 		<Board {tool} {decorationKind} />
 
 		<div
-			class="pointer-events-none absolute top-4 left-4"
+			class="pointer-events-none absolute top-4 left-4 flex items-baseline gap-3"
 			in:fly={{ y: -12, duration: 450, delay: 350, easing: cubicOut }}
 		>
 			<h1
@@ -45,6 +46,18 @@
 			>
 				Minirail
 			</h1>
+			<span class="flex items-baseline gap-1.5 text-sm text-muted-foreground drop-shadow-sm">
+				<span class="max-w-[40vw] truncate">
+					{doc.name ?? 'Untitled track'}
+				</span>
+				{#if doc.dirty}
+					<span
+						class="text-xs font-medium text-amber-600 dark:text-amber-400"
+						title="Unsaved changes"
+						aria-label="Unsaved changes">•</span
+					>
+				{/if}
+			</span>
 		</div>
 
 		<div

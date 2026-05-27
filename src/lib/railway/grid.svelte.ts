@@ -18,6 +18,7 @@ import {
 	rotatePiece,
 	toggleSwitch
 } from './pieces';
+import { markDirty } from './doc.svelte';
 
 export const grid = $state({
 	width: 40,
@@ -45,6 +46,7 @@ export function placePiece(x: number, y: number, kind: PieceKind, rotation: Rota
 	const k = cellKey(x, y);
 	grid.decorations.delete(k);
 	grid.cells.set(k, newPiece(kind, rotation));
+	markDirty();
 }
 
 // Restore a fully-formed piece (preserves switch `active` state). Used by the
@@ -64,20 +66,28 @@ export function setStation(x: number, y: number) {
 
 export function rotateAt(x: number, y: number) {
 	const p = grid.cells.get(cellKey(x, y));
-	if (p) grid.cells.set(cellKey(x, y), rotatePiece(p));
+	if (p) {
+		grid.cells.set(cellKey(x, y), rotatePiece(p));
+		markDirty();
+	}
 }
 
 export function toggleAt(x: number, y: number) {
 	const p = grid.cells.get(cellKey(x, y));
-	if (p) grid.cells.set(cellKey(x, y), toggleSwitch(p));
+	if (p) {
+		grid.cells.set(cellKey(x, y), toggleSwitch(p));
+		markDirty();
+	}
 }
 
 export function removeAt(x: number, y: number) {
 	const k = cellKey(x, y);
-	grid.cells.delete(k);
-	grid.stations.delete(k);
-	grid.decorations.delete(k);
-	grid.groundOvers.delete(k);
+	const had =
+		grid.cells.delete(k) ||
+		grid.stations.delete(k) ||
+		grid.decorations.delete(k) ||
+		grid.groundOvers.delete(k);
+	if (had) markDirty();
 }
 
 export function clearAll() {
@@ -85,6 +95,7 @@ export function clearAll() {
 	grid.stations.clear();
 	grid.decorations.clear();
 	grid.groundOvers.clear();
+	markDirty();
 }
 
 export function getDecoration(x: number, y: number): Decoration | undefined {
@@ -108,18 +119,22 @@ export function placeDecoration(x: number, y: number, kind: DecorationKind) {
 		const existing = grid.groundOvers.get(k);
 		if (existing && existing.kind === kind) {
 			grid.groundOvers.delete(k);
+			markDirty();
 			return;
 		}
 		grid.groundOvers.set(k, { kind });
+		markDirty();
 		return;
 	}
 	if (grid.cells.has(k)) return;
 	const existing = grid.decorations.get(k);
 	if (existing && existing.kind === kind) {
 		grid.decorations.delete(k);
+		markDirty();
 		return;
 	}
 	grid.decorations.set(k, { kind });
+	markDirty();
 }
 
 // Restore a decoration unconditionally. Used by the save/load system; routes
@@ -136,8 +151,8 @@ export function setDecoration(x: number, y: number, kind: DecorationKind) {
 
 export function removeDecorationAt(x: number, y: number) {
 	const k = cellKey(x, y);
-	grid.decorations.delete(k);
-	grid.groundOvers.delete(k);
+	const had = grid.decorations.delete(k) || grid.groundOvers.delete(k);
+	if (had) markDirty();
 }
 
 export function getStation(x: number, y: number): Station | undefined {
@@ -154,11 +169,13 @@ export function toggleStationAt(x: number, y: number) {
 	const k = cellKey(x, y);
 	if (grid.stations.has(k)) {
 		grid.stations.delete(k);
+		markDirty();
 		return;
 	}
 	if (!grid.cells.has(k)) return;
 	const station: Station = $state({ peopleWaiting: 0, spawnTimer: 0 });
 	grid.stations.set(k, station);
+	markDirty();
 }
 
 // Place a piece that carries the path {from, to} through (x, y). If the cell
@@ -178,6 +195,7 @@ export function drawPath(x: number, y: number, from: Dir, to: Dir) {
 			const sw = resolveSwitchForPaths(existingPaths[0], { from, to });
 			if (sw) {
 				grid.cells.set(cellKey(x, y), newPiece(sw.kind, sw.rotation));
+				markDirty();
 				return;
 			}
 		} else {
@@ -191,12 +209,15 @@ export function drawPath(x: number, y: number, from: Dir, to: Dir) {
 		const k = cellKey(x, y);
 		grid.decorations.delete(k);
 		grid.cells.set(k, newPiece(single.kind, single.rotation));
+		markDirty();
 	}
 }
 
 export function resize(width: number, height: number) {
+	if (grid.width === width && grid.height === height) return;
 	grid.width = width;
 	grid.height = height;
+	markDirty();
 	for (const k of grid.cells.keys()) {
 		const [x, y] = k.split(',').map(Number);
 		if (x < 0 || x >= width || y < 0 || y >= height) {

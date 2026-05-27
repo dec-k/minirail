@@ -10,10 +10,9 @@
 		readLayoutFromFile,
 		applyLayout,
 		deleteLocalByKey,
+		newDocument,
 		type SavedEntry
 	} from '$lib/railway/persistence';
-	import { clearAll } from '$lib/railway/grid.svelte';
-	import { clearAllLocos } from '$lib/railway/sim.svelte';
 
 	let { onstart }: { onstart: () => void } = $props();
 
@@ -48,8 +47,7 @@
 	}
 
 	function startNew() {
-		clearAllLocos();
-		clearAll();
+		newDocument();
 		onstart();
 	}
 
@@ -61,7 +59,7 @@
 				refresh();
 				return;
 			}
-			applyLayout(layout);
+			applyLayout(layout, entry.key);
 			onstart();
 		} catch (err) {
 			flash('err', err instanceof Error ? err.message : 'Load failed.');
@@ -80,7 +78,7 @@
 		if (!file) return;
 		try {
 			const layout = await readLayoutFromFile(file);
-			applyLayout(layout);
+			applyLayout(layout, null);
 			onstart();
 		} catch (err) {
 			flash('err', err instanceof Error ? err.message : 'Import failed.');
@@ -128,13 +126,17 @@
 			class="flex flex-col gap-3 sm:flex-row"
 			in:fly={{ y: 12, duration: 500, delay: 400, easing: cubicOut }}
 		>
-			<Button size="lg" class="flex-1 font-bold bg-gradient-to-r from-blue-500 to-purple-500 text-white" onclick={startNew}>
+			<Button
+				size="lg"
+				class="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 font-bold text-white"
+				onclick={startNew}
+			>
 				<TrainTrack />
-				Create a Track
+				New Track
 			</Button>
 			<Button variant="outline" size="lg" class="flex-1" onclick={() => fileInput?.click()}>
 				<Upload />
-				Load from File...
+				Open File…
 			</Button>
 			<input
 				type="file"
@@ -165,47 +167,47 @@
 		{#if entries.length > 0}
 			<div in:fade={{ duration: 500, delay: 550, easing: cubicOut }}>
 				<Card class="p-4">
-				<div class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-					Local Saves
-				</div>
-				<div class="flex flex-col gap-1.5">
-					{#each entries as entry (entry.key)}
-						<div
-							class="flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 py-2"
-						>
-							<button
-								type="button"
-								class="flex min-w-0 flex-1 flex-col text-left transition-colors hover:text-foreground"
-								onclick={() => loadEntry(entry)}
+					<div class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+						My tracks
+					</div>
+					<div class="flex flex-col gap-1.5">
+						{#each entries as entry (entry.key)}
+							<div
+								class="flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 py-2"
 							>
-								<span class="truncate text-sm font-medium">{entry.name}</span>
-								{#if entry.savedAt}
-									<span class="text-xs text-muted-foreground">{fmtTime(entry.savedAt)}</span>
-								{/if}
-							</button>
-							<Button
-								variant="outline"
-								size="sm"
-								onclick={() => loadEntry(entry)}
-								title="Load this layout"
-							>
-								<FolderOpen />
-								Load
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon-sm"
-								class="text-muted-foreground hover:text-destructive"
-								onclick={() => deleteEntry(entry.key)}
-								aria-label="Delete {entry.name}"
-								title="Delete"
-							>
-								<Trash2 />
-							</Button>
-						</div>
-					{/each}
-				</div>
-			</Card>
+								<button
+									type="button"
+									class="flex min-w-0 flex-1 flex-col text-left transition-colors hover:text-foreground"
+									onclick={() => loadEntry(entry)}
+								>
+									<span class="truncate text-sm font-medium">{entry.name}</span>
+									{#if entry.savedAt}
+										<span class="text-xs text-muted-foreground">{fmtTime(entry.savedAt)}</span>
+									{/if}
+								</button>
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={() => loadEntry(entry)}
+									title="Open this track"
+								>
+									<FolderOpen />
+									Open
+								</Button>
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									class="text-muted-foreground hover:text-destructive"
+									onclick={() => deleteEntry(entry.key)}
+									aria-label="Delete {entry.name}"
+									title="Delete"
+								>
+									<Trash2 />
+								</Button>
+							</div>
+						{/each}
+					</div>
+				</Card>
 			</div>
 		{/if}
 	</div>

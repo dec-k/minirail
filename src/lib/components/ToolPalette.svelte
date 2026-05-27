@@ -16,12 +16,13 @@
 		Sprout,
 		Mountain,
 		CornerDownRight,
-		CornerDownLeft
+		CornerDownLeft,
+		Hand
 	} from 'lucide-svelte';
 	import { slide, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 
-	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' | 'pan';
 	type Icon = typeof Pencil;
 
 	let {
@@ -59,6 +60,15 @@
 			aria-label="Select tool"
 			class="flex-col border-none bg-transparent p-0"
 		>
+			<ToggleGroup.Item
+				value="pan"
+				aria-label="Pan"
+				title="Pan"
+				class="size-9 p-0 md:hidden"
+			>
+				<Hand class="size-4" />
+			</ToggleGroup.Item>
+			<div class="my-1 h-px w-full bg-border md:hidden"></div>
 			{#each tools as t (t.id)}
 				<ToggleGroup.Item value={t.id} aria-label={t.label} title={t.label} class="size-9 p-0">
 					<t.icon class="size-4" />

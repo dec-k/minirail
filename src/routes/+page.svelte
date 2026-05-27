@@ -15,7 +15,7 @@
 	import { cubicOut } from 'svelte/easing';
 	import type { DecorationKind, PieceKind } from '$lib/railway/types';
 
-	let tool: PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' = $state('draw');
+	let tool: PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' | 'pan' = $state('draw');
 	let decorationKind: DecorationKind = $state('tree');
 	let started = $state(false);
 	let menuOpen = $state(false);

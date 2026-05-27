@@ -36,7 +36,6 @@
 		waveGlints
 	} from '$lib/railway/decorations';
 	import { particles } from '$lib/railway/particles.svelte';
-	import { SvelteMap } from 'svelte/reactivity';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
 
@@ -216,79 +215,8 @@
 	const MIN_ZOOM = 0.25;
 	const MAX_ZOOM = 4;
 
-	// Multi-touch gesture tracking. We only register touch/pen pointers here;
-	// mouse stays out so middle-button pan and tool clicks behave as before.
-	type ActivePointer = { x: number; y: number };
-	const activePointers = new SvelteMap<number, ActivePointer>();
-
-	// Pinch state captured at the moment the second finger lands. The world
-	// point under the initial midpoint is held invariant so the content under
-	// the user's fingers tracks them as they pinch/pan.
-	type Pinch = {
-		startDist: number;
-		startZoom: number;
-		worldX: number;
-		worldY: number;
-	};
-	let pinch: Pinch | null = $state(null);
-
-	// Set when a pinch ends so the synthetic click that some browsers fire on
-	// touchup doesn't slip through and place a tile.
-	let suppressNextClick = false;
-
-	let svgEl: SVGSVGElement | undefined = $state();
-
-	function cancelToolDrag() {
-		if (draw) {
-			if (svgEl?.hasPointerCapture(draw.pointerId)) svgEl.releasePointerCapture(draw.pointerId);
-			draw = null;
-		}
-		if (paint) {
-			if (svgEl?.hasPointerCapture(paint.pointerId)) svgEl.releasePointerCapture(paint.pointerId);
-			paint = null;
-		}
-	}
-
-	function pinchMetrics(rect: DOMRect) {
-		const pts = [...activePointers.values()];
-		const ax = pts[0].x - rect.left;
-		const ay = pts[0].y - rect.top;
-		const bx = pts[1].x - rect.left;
-		const by = pts[1].y - rect.top;
-		const midX = (ax + bx) / 2;
-		const midY = (ay + by) / 2;
-		const dist = Math.hypot(bx - ax, by - ay) || 1;
-		return { midX, midY, dist };
-	}
-
-	function startPinch(el: HTMLElement) {
-		const { midX, midY, dist } = pinchMetrics(el.getBoundingClientRect());
-		pinch = {
-			startDist: dist,
-			startZoom: zoom,
-			worldX: (midX - panX) / zoom,
-			worldY: (midY - panY) / zoom
-		};
-	}
-
-	function updatePinch(el: HTMLElement) {
-		if (!pinch || activePointers.size < 2) return;
-		const { midX, midY, dist } = pinchMetrics(el.getBoundingClientRect());
-		const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinch.startZoom * (dist / pinch.startDist)));
-		zoom = next;
-		panX = midX - pinch.worldX * next;
-		panY = midY - pinch.worldY * next;
-	}
-
 	function handleWheel(e: WheelEvent) {
 		e.preventDefault();
-		// Browsers set ctrlKey on trackpad pinch (and on real Ctrl+wheel). Plain
-		// wheel — including two-finger trackpad scroll — pans instead.
-		if (!e.ctrlKey) {
-			panX -= e.deltaX;
-			panY -= e.deltaY;
-			return;
-		}
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		const cx = e.clientX - rect.left;
 		const cy = e.clientY - rect.top;
@@ -296,7 +224,7 @@
 		// pinned to the cursor as zoom changes.
 		const wx = (cx - panX) / zoom;
 		const wy = (cy - panY) / zoom;
-		const factor = Math.exp(-e.deltaY * 0.015);
+		const factor = Math.exp(-e.deltaY * 0.0015);
 		const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
 		zoom = next;
 		panX = cx - wx * next;
@@ -304,18 +232,6 @@
 	}
 
 	function handlePanDown(e: PointerEvent) {
-		const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
-		if (isTouch) {
-			activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-			// Second finger lands → abandon any tool drag the first finger started
-			// and switch to pinch/pan mode for the rest of the gesture.
-			if (activePointers.size === 2 && !pinch) {
-				cancelToolDrag();
-				startPinch(e.currentTarget as HTMLElement);
-				e.preventDefault();
-			}
-			return;
-		}
 		// Middle-mouse drag pans. Left button is owned by the active tool; right
 		// button is left alone for native browser menus.
 		if (e.button !== 1) return;
@@ -331,28 +247,12 @@
 	}
 
 	function handlePanMove(e: PointerEvent) {
-		if (activePointers.has(e.pointerId)) {
-			activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-			if (pinch) {
-				updatePinch(e.currentTarget as HTMLElement);
-				return;
-			}
-		}
 		if (!pan || e.pointerId !== pan.pointerId) return;
 		panX = pan.origPanX + (e.clientX - pan.startX);
 		panY = pan.origPanY + (e.clientY - pan.startY);
 	}
 
 	function handlePanUp(e: PointerEvent) {
-		if (activePointers.delete(e.pointerId)) {
-			if (pinch && activePointers.size < 2) {
-				pinch = null;
-				// Some browsers fire a synthetic click on touchend; eat the next one
-				// so it can't place a tile where the user's last finger lifted.
-				suppressNextClick = true;
-			}
-			return;
-		}
 		if (!pan || e.pointerId !== pan.pointerId) return;
 		const el = e.currentTarget as HTMLElement;
 		if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
@@ -410,9 +310,6 @@
 
 	function handlePointerDown(e: PointerEvent) {
 		if (e.button !== 0 || e.shiftKey) return;
-		// If a touch is already down, this is the second finger of a pinch —
-		// don't start a tool drag. The wrapper handler will switch to pinch mode.
-		if (activePointers.size >= 1) return;
 		const svg = e.currentTarget as SVGSVGElement;
 		const cell = cellFromEvent(e, svg);
 		if (!cell) return;
@@ -482,10 +379,6 @@
 	}
 
 	function handleClick(e: MouseEvent) {
-		if (suppressNextClick) {
-			suppressNextClick = false;
-			return;
-		}
 		const svg = e.currentTarget as SVGSVGElement;
 		const cell = cellFromEvent(e, svg);
 		if (!cell) return;
@@ -587,7 +480,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	class="absolute inset-0 touch-none overflow-hidden bg-background"
+	class="absolute inset-0 overflow-hidden bg-background"
 	class:cursor-grabbing={pan !== null}
 	onwheel={handleWheel}
 	onpointerdown={handlePanDown}
@@ -601,7 +494,6 @@
 	style="transform: translate({panX}px, {panY}px) scale({zoom})"
 >
 	<svg
-		bind:this={svgEl}
 		viewBox="0 0 {widthPx} {heightPx}"
 		width={widthPx}
 		height={heightPx}

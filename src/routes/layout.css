@@ -111,12 +111,16 @@
 @layer base {
 	html {
 		font-family: var(--font-sans);
+		overscroll-behavior: none;
+		touch-action: manipulation;
 	}
 	body {
 		background-color: var(--color-background);
 		color: var(--color-foreground);
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+		overscroll-behavior: none;
+		touch-action: manipulation;
 	}
 	*,
 	::before,

@@ -37,7 +37,7 @@
 	} from '$lib/railway/decorations';
 	import { particles } from '$lib/railway/particles.svelte';
 
-	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate';
+	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' | 'pan';
 
 	let { tool, decorationKind }: { tool: Tool; decorationKind: DecorationKind } = $props();
 
@@ -232,9 +232,12 @@
 	}
 
 	function handlePanDown(e: PointerEvent) {
-		// Middle-mouse drag pans. Left button is owned by the active tool; right
-		// button is left alone for native browser menus.
-		if (e.button !== 1) return;
+		// Pan triggers: right-mouse drag, or any primary press while the pan tool
+		// is active (covers touch + left-click). Middle-mouse still works as a
+		// convenience for users who expect it.
+		const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
+		const toolPan = tool === 'pan' && (e.button === 0 || isTouch);
+		if (e.button !== 1 && e.button !== 2 && !toolPan) return;
 		e.preventDefault();
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		pan = {
@@ -310,6 +313,7 @@
 
 	function handlePointerDown(e: PointerEvent) {
 		if (e.button !== 0 || e.shiftKey) return;
+		if (tool === 'pan') return;
 		const svg = e.currentTarget as SVGSVGElement;
 		const cell = cellFromEvent(e, svg);
 		if (!cell) return;
@@ -391,6 +395,7 @@
 		}
 		if (tool === 'draw') return; // pointerdown/up handles drawing
 		if (tool === 'decorate') return; // pointerdown/up handles paint + toggle
+		if (tool === 'pan') return;
 		if (tool === 'erase') {
 			removeAt(x, y);
 			return;
@@ -480,7 +485,8 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	class="absolute inset-0 overflow-hidden bg-background"
+	class="absolute inset-0 overflow-hidden bg-background touch-pinch-zoom"
+	class:cursor-grab={tool === 'pan' && pan === null}
 	class:cursor-grabbing={pan !== null}
 	onwheel={handleWheel}
 	onpointerdown={handlePanDown}
@@ -488,6 +494,7 @@
 	onpointerup={handlePanUp}
 	onpointercancel={handlePanUp}
 	onauxclick={(e) => e.preventDefault()}
+	oncontextmenu={(e) => e.preventDefault()}
 >
 <div
 	class="absolute top-0 left-0 origin-top-left overflow-hidden rounded-lg bg-board-bg shadow-2xl ring-1 ring-black/5 dark:ring-white/10"

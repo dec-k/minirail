@@ -485,7 +485,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	class="absolute inset-0 overflow-hidden bg-background"
+	class="absolute inset-0 overflow-hidden bg-background touch-none"
 	class:cursor-grab={tool === 'pan' && pan === null}
 	class:cursor-grabbing={pan !== null}
 	onwheel={handleWheel}

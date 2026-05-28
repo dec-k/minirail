@@ -17,6 +17,7 @@ import {
 	type PieceKind,
 	type Rotation
 } from './types';
+import { setLoaded, markClean, clearLoaded } from './doc.svelte';
 
 export const SCHEMA_VERSION = 3 as const;
 // Older save versions we can still read. Each one needs an explicit upgrade
@@ -95,7 +96,10 @@ export function serializeLayout(name: string): SavedLayout {
 	};
 }
 
-export function applyLayout(layout: SavedLayout) {
+// Bulk-restore a layout onto the canvas. `key` is the localStorage suffix when
+// loading from a saved entry; pass null for file/paste imports (the doc has a
+// name but no persisted key yet — first Save will prompt for one).
+export function applyLayout(layout: SavedLayout, key: string | null = null) {
 	// Suppress the per-tile snap-in transition while bulk-restoring; a freshly
 	// loaded layout otherwise plays the placement animation dozens of times at
 	// once. Re-enabled after the current render flush.
@@ -112,6 +116,24 @@ export function applyLayout(layout: SavedLayout) {
 	for (const s of layout.grid.stations) setStation(s.x, s.y);
 	for (const d of layout.grid.decorations) setDecoration(d.x, d.y, d.kind);
 	replaceLocos(layout.locos);
+	// Mutations above flip the dirty flag; reset it now that the load is the
+	// authoritative state, then bind the doc to its key + name.
+	setLoaded(key, layout.name);
+	if (browser) {
+		requestAnimationFrame(() => {
+			placementFx.suppressIntro = false;
+		});
+	} else {
+		placementFx.suppressIntro = false;
+	}
+}
+
+// Wipe the canvas and reset the document state. Used by the "New" action.
+export function newDocument() {
+	placementFx.suppressIntro = true;
+	clearAllLocos();
+	clearAll();
+	clearLoaded();
 	if (browser) {
 		requestAnimationFrame(() => {
 			placementFx.suppressIntro = false;
@@ -251,14 +273,37 @@ export function listLocalSaves(): SavedEntry[] {
 	return out;
 }
 
-export function saveLocal(name: string): SavedLayout {
+// Persist the canvas as a new entry under `name`. The storage key is derived
+// from the (trimmed) name — collisions overwrite, so the UI is responsible for
+// warning the user before calling this with an existing name. After saving,
+// the doc becomes the loaded document at this key.
+export function saveAs(name: string): SavedLayout {
 	const trimmed = name.trim();
 	if (!trimmed) throw new Error('Name cannot be empty.');
 	const layout = serializeLayout(trimmed);
 	if (browser) {
 		localStorage.setItem(STORAGE_PREFIX + trimmed, JSON.stringify(layout));
 	}
+	setLoaded(trimmed, trimmed);
 	return layout;
+}
+
+// Persist the canvas back to its currently-loaded localStorage key. The name
+// in the saved JSON is whatever the doc's display name is — typically the same
+// as the key, but kept independent so future rename support is possible.
+export function saveCurrent(key: string, name: string): SavedLayout {
+	const trimmedName = name.trim() || key;
+	const layout = serializeLayout(trimmedName);
+	if (browser) {
+		localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(layout));
+	}
+	markClean();
+	return layout;
+}
+
+export function localSaveExists(key: string): boolean {
+	if (!browser) return false;
+	return localStorage.getItem(STORAGE_PREFIX + key.trim()) !== null;
 }
 
 export function loadLocalByKey(key: string): SavedLayout | null {

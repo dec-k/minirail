@@ -15,6 +15,7 @@ import { pathLength, sample } from './geometry';
 import { getPiece, grid, toggleAt } from './grid.svelte';
 import { hasActiveParticles, spawnSteam, tickParticles } from './particles.svelte';
 import { SvelteMap } from 'svelte/reactivity';
+import { markDirty } from './doc.svelte';
 
 export type { Reverser };
 
@@ -112,20 +113,26 @@ export function placeLoco(x: number, y: number) {
 		autoReverse: false,
 		switchLine: false
 	});
+	markDirty();
 }
 
 export function removeLoco(id: number) {
 	const idx = sim.locos.findIndex((l) => l.id === id);
-	if (idx >= 0) sim.locos.splice(idx, 1);
+	if (idx >= 0) {
+		sim.locos.splice(idx, 1);
+		markDirty();
+	}
 	steamTimers.delete(id);
 	// loop() self-cancels via shouldAnimate() — don't tear down here in case
 	// stations still need spawn ticks.
 }
 
 export function clearAllLocos() {
+	const had = sim.locos.length > 0;
 	sim.locos.length = 0;
 	steamTimers.clear();
 	nextLocoId = 1;
+	if (had) markDirty();
 	// loop() self-cancels via shouldAnimate().
 }
 
@@ -810,14 +817,18 @@ export function setReverser(id: number, r: Reverser) {
 export function setAutoReverse(id: number, on: boolean) {
 	const loco = findLoco(id);
 	if (!loco) return;
+	if (loco.autoReverse === on) return;
 	loco.autoReverse = on;
+	markDirty();
 	startLoopIfNeeded();
 }
 
 export function setSwitchLine(id: number, on: boolean) {
 	const loco = findLoco(id);
 	if (!loco) return;
+	if (loco.switchLine === on) return;
 	loco.switchLine = on;
+	markDirty();
 }
 
 export function setThrottle(id: number, t: number) {
@@ -859,11 +870,14 @@ export function addWagon(id: number) {
 		stopped: false,
 		routingCursor: last.routingCursor
 	});
+	markDirty();
 }
 
 export function removeWagon(id: number) {
 	const loco = findLoco(id);
 	if (!loco) return;
+	if (loco.wagons.length === 0) return;
 	loco.wagons.pop();
 	pruneTrail(loco);
+	markDirty();
 }

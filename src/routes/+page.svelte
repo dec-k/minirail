@@ -24,7 +24,7 @@
 		<Board {tool} {decorationKind} />
 
 		<div
-			class="pointer-events-none absolute top-4 left-4 flex items-baseline gap-3 rounded-xl border border-border bg-card/90 px-3 py-1.5 shadow-md backdrop-blur"
+			class="pointer-events-none absolute top-4 left-4"
 			in:fly={{ y: -12, duration: 450, delay: 350, easing: cubicOut }}
 		>
 			<h1
@@ -32,18 +32,22 @@
 			>
 				Minirail
 			</h1>
-			<span class="flex items-baseline gap-1.5 text-sm text-muted-foreground">
-				<span class="max-w-[40vw] truncate">
-					{doc.name ?? 'Untitled track'}
-				</span>
-				{#if doc.dirty}
-					<span
-						class="text-xs font-medium text-amber-600 dark:text-amber-400"
-						title="Unsaved changes"
-						aria-label="Unsaved changes">•</span
-					>
-				{/if}
+		</div>
+
+		<div
+			class="save-name pointer-events-none absolute top-4 left-1/2 flex max-w-[60vw] -translate-x-1/2 items-baseline gap-1.5 text-sm font-semibold text-foreground"
+			in:fly={{ y: -12, duration: 450, delay: 350, easing: cubicOut }}
+		>
+			<span class="truncate">
+				{doc.name ?? 'Untitled track'}
 			</span>
+			{#if doc.dirty}
+				<span
+					class="text-xs font-medium text-amber-600 dark:text-amber-400"
+					title="Unsaved changes"
+					aria-label="Unsaved changes">•</span
+				>
+			{/if}
 		</div>
 
 		<div
@@ -68,3 +72,13 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.save-name {
+		text-shadow:
+			0 0 6px var(--color-board-bg),
+			0 0 6px var(--color-board-bg),
+			0 0 3px var(--color-board-bg),
+			0 0 3px var(--color-board-bg);
+	}
+</style>

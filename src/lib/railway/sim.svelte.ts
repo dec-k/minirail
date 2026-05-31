@@ -5,7 +5,9 @@ import {
 	cellKey,
 	isSwitch,
 	LOCO_COLORS,
+	type Dir,
 	type Loco,
+	type Piece,
 	type Reverser,
 	type RoutingDecision,
 	type Vehicle
@@ -330,80 +332,125 @@ function shouldAnimate(): boolean {
 	return anyMoving() || anyBoarding() || anyStationBacklog() || hasActiveParticles();
 }
 
-// Read-only walk forward along the loco's intended route. Returns the distance
-// (in tile units) until the loco reaches the centre of the next station tile
-// where it must stop, or +Infinity if no such station is within `maxDist` (or
-// the loco can't usefully stop — no wagons or no reverser).
+type Candidate = { idx: number; entry: 'from' | 'to' };
+
+// All paths in `piece` that connect at `entryDir`, tagged by which end of the
+// path that port is. Used at boundary crossings to discover where a vehicle
+// can route into the next tile.
+function candidatesAtEntry(piece: Piece, entryDir: Dir): Candidate[] {
+	const paths = pathsOf(piece);
+	const out: Candidate[] = [];
+	for (let i = 0; i < paths.length; i++) {
+		if (paths[i].from === entryDir) out.push({ idx: i, entry: 'from' });
+		else if (paths[i].to === entryDir) out.push({ idx: i, entry: 'to' });
+	}
+	return out;
+}
+
+// Scan `trail` from `cursor` for the first entry that matches (tileKey,
+// entryDir) AND points at one of `candidates`. Returns the matched candidate
+// and the cursor position just past it, or null when nothing matches.
+function trailMatch(
+	trail: readonly RoutingDecision[],
+	cursor: number,
+	tileKey: string,
+	entryDir: Dir,
+	candidates: readonly Candidate[]
+): { chosen: Candidate; nextCursor: number } | null {
+	for (let k = cursor; k < trail.length; k++) {
+		const r = trail[k];
+		if (r.tileKey !== tileKey || r.entryPort !== entryDir) continue;
+		const c = candidates.find((cn) => cn.idx === r.pathIdx);
+		if (c) return { chosen: c, nextCursor: k + 1 };
+	}
+	return null;
+}
+
+type WalkTile = {
+	x: number;
+	y: number;
+	pathIdx: number;
+	t: number;
+	dir: 1 | -1;
+	effDir: 1 | -1;
+	pl: number;
+	distAtStart: number;
+	first: boolean;
+};
+
+type WalkEnd =
+	| { kind: 'deadEnd'; distance: number }
+	| { kind: 'tooFar' };
+
+// Read-only walk along a vehicle's intended route, yielding one entry per tile
+// visited. `distAtStart` is the cumulative distance from `start` to the entry-
+// side of the current tile; callers add intra-tile offsets to it when they
+// report distances. `first` is true on the starting tile only — useful for
+// guards like "ignore the tile we just departed".
 //
-// Mirrors `step`'s routing decisions exactly so the deceleration aim point
-// stays consistent with what the loco will actually do at switches.
-function distanceToNextStop(loco: Loco, maxDist: number): number {
-	if (loco.reverser === 0) return Infinity;
-	if (loco.wagons.length === 0) return Infinity;
-	const motionSign = loco.reverser as 1 | -1;
-	let x = loco.x;
-	let y = loco.y;
-	let pathIdx = loco.pathIdx;
-	let t = loco.t;
-	let dir = loco.dir;
-	let cursor = loco.routingCursor;
+// At facing-point switches, mirrors step()'s routing decisions via the trail +
+// active fallback. The trail is read-only here — only step() pushes new
+// entries — and the sibling fallback step() uses is omitted: it only matters
+// for real vehicles, and walkRoute deliberately doesn't mutate any.
+//
+// Terminates by returning a `WalkEnd`:
+//   - `deadEnd { distance }` when the route runs out (current tile gone, no
+//     next piece, or no candidates at the entry port). `distance` is the
+//     accumulated distance up to that point — distance-to-wall for the
+//     boundary cases, 0 if the leader itself sits on a missing tile.
+//   - `tooFar` when accumulated distance exceeds `maxDist`, or the safety
+//     counter trips.
+function* walkRoute(
+	start: {
+		x: number;
+		y: number;
+		pathIdx: number;
+		t: number;
+		dir: 1 | -1;
+		routingCursor: number;
+	},
+	motionSign: 1 | -1,
+	trail: readonly RoutingDecision[],
+	maxDist: number
+): Generator<WalkTile, WalkEnd, void> {
+	let x = start.x;
+	let y = start.y;
+	let pathIdx = start.pathIdx;
+	let t = start.t;
+	let dir = start.dir;
+	let cursor = start.routingCursor;
 	let dist = 0;
-	let safety = 64;
 	let first = true;
+	let safety = 64;
 	while (dist <= maxDist && safety-- > 0) {
 		const piece = getPiece(x, y);
-		if (!piece) return Infinity;
+		if (!piece) return { kind: 'deadEnd', distance: dist };
 		const paths = pathsOf(piece);
 		const path = paths[pathIdx];
+		if (!path) return { kind: 'deadEnd', distance: dist };
 		const pl = pathLength(path);
 		const effDir = (dir * motionSign) as 1 | -1;
-		// Stop at this tile iff something useful would happen — either we'd let
-		// a foreign-origin passenger off, or board a fresh one with capacity to
-		// spare. Skip the loco's current tile if it just finished boarding here,
-		// so the lookahead doesn't immediately re-trigger on the same tile.
-		const tk = cellKey(x, y);
-		const justLeftHere = first && loco.lastBoardedAt === tk;
-		if (!justLeftHere && shouldStopAt(loco, tk)) {
-			const targetT = 0.5;
-			let distToCentre: number;
-			if (effDir === 1) distToCentre = (targetT - t) * pl;
-			else distToCentre = (t - targetT) * pl;
-			if (distToCentre >= -1e-6) return dist + Math.max(0, distToCentre);
-		}
 		const remainingT = effDir === 1 ? 1 - t : t;
 		const remainingDist = remainingT * pl;
+		yield { x, y, pathIdx, t, dir, effDir, pl, distAtStart: dist, first };
 		dist += remainingDist;
-		if (dist > maxDist) return Infinity;
+		if (dist > maxDist) return { kind: 'tooFar' };
 		const exitDir = effDir === 1 ? path.to : path.from;
 		const nx = x + dx[exitDir];
 		const ny = y + dy[exitDir];
 		const entryDir = opposite(exitDir);
 		const nextPiece = getPiece(nx, ny);
-		if (!nextPiece) return Infinity;
-		const nextPaths = pathsOf(nextPiece);
-		const candidates: { idx: number; entry: 'from' | 'to' }[] = [];
-		for (let i = 0; i < nextPaths.length; i++) {
-			if (nextPaths[i].from === entryDir) candidates.push({ idx: i, entry: 'from' });
-			else if (nextPaths[i].to === entryDir) candidates.push({ idx: i, entry: 'to' });
-		}
-		if (candidates.length === 0) return Infinity;
-		let chosen = candidates[0];
+		if (!nextPiece) return { kind: 'deadEnd', distance: dist };
+		const candidates = candidatesAtEntry(nextPiece, entryDir);
+		if (candidates.length === 0) return { kind: 'deadEnd', distance: dist };
+		let chosen: Candidate = candidates[0];
 		if (candidates.length > 1) {
 			const tk = cellKey(nx, ny);
-			let matched: { idx: number; entry: 'from' | 'to' } | null = null;
-			for (let k = cursor; k < loco.routingTrail.length; k++) {
-				const r = loco.routingTrail[k];
-				if (r.tileKey === tk && r.entryPort === entryDir) {
-					const c = candidates.find((cn) => cn.idx === r.pathIdx);
-					if (c) {
-						matched = c;
-						cursor = k + 1;
-						break;
-					}
-				}
-			}
-			if (matched) chosen = matched;
-			else {
+			const m = trailMatch(trail, cursor, tk, entryDir, candidates);
+			if (m) {
+				chosen = m.chosen;
+				cursor = m.nextCursor;
+			} else {
 				const active = nextPiece.active ?? 0;
 				chosen = candidates.find((c) => c.idx === active) ?? candidates[0];
 			}
@@ -416,83 +463,62 @@ function distanceToNextStop(loco: Loco, maxDist: number): number {
 		t = chosen.entry === 'from' ? 0 : 1;
 		first = false;
 	}
-	return Infinity;
+	return { kind: 'tooFar' };
 }
 
-// Read-only walk forward along the loco's intended route from the *leader*
-// (loco when going forward, rear wagon when reversing). Returns distance until
-// the leader would reach a dead end (no next piece or no path connects at the
-// entry port), or +Infinity if no dead end within `maxDist`. Folded into the
-// obstacle distance so the train decelerates to rest at the wall — without
-// this, reversing into a stub track lets the loco step past stopped wagons
-// and crush the chain.
+function walkStart(v: Vehicle) {
+	return {
+		x: v.x,
+		y: v.y,
+		pathIdx: v.pathIdx,
+		t: v.t,
+		dir: v.dir,
+		routingCursor: v.routingCursor
+	};
+}
+
+// Distance until the loco reaches the centre of the next station tile where
+// it must stop, or +Infinity if no such station is within `maxDist` (or the
+// loco can't usefully stop — no wagons or no reverser).
+function distanceToNextStop(loco: Loco, maxDist: number): number {
+	if (loco.reverser === 0) return Infinity;
+	if (loco.wagons.length === 0) return Infinity;
+	const motionSign = loco.reverser as 1 | -1;
+	const walker = walkRoute(walkStart(loco), motionSign, loco.routingTrail, maxDist);
+	while (true) {
+		const r = walker.next();
+		if (r.done) return Infinity;
+		const tile = r.value;
+		// Stop at this tile iff something useful would happen — either we'd let
+		// a foreign-origin passenger off, or board a fresh one with capacity to
+		// spare. Skip the loco's current tile if it just finished boarding here,
+		// so the lookahead doesn't immediately re-trigger on the same tile.
+		const tk = cellKey(tile.x, tile.y);
+		const justLeftHere = tile.first && loco.lastBoardedAt === tk;
+		if (!justLeftHere && shouldStopAt(loco, tk)) {
+			const targetT = 0.5;
+			const distToCentre =
+				tile.effDir === 1 ? (targetT - tile.t) * tile.pl : (tile.t - targetT) * tile.pl;
+			if (distToCentre >= -1e-6) return tile.distAtStart + Math.max(0, distToCentre);
+		}
+	}
+}
+
+// Distance until the leader (loco forward, rear wagon when reversing) would
+// reach a dead end (no next piece, or no path connects at the entry port), or
+// +Infinity if no dead end within `maxDist`. Folded into the obstacle distance
+// so the train decelerates to rest at the wall — without this, reversing into
+// a stub track lets the loco step past stopped wagons and crush the chain.
 function distanceToDeadEnd(loco: Loco, maxDist: number): number {
 	if (loco.reverser === 0) return Infinity;
 	const motionSign = loco.reverser as 1 | -1;
 	const leader: Vehicle =
 		motionSign === -1 && loco.wagons.length > 0 ? loco.wagons[loco.wagons.length - 1] : loco;
-	let x = leader.x;
-	let y = leader.y;
-	let pathIdx = leader.pathIdx;
-	let t = leader.t;
-	let dir = leader.dir;
-	let cursor = leader.routingCursor;
-	let dist = 0;
-	let safety = 64;
-	while (dist <= maxDist && safety-- > 0) {
-		const piece = getPiece(x, y);
-		if (!piece) return dist;
-		const paths = pathsOf(piece);
-		const path = paths[pathIdx];
-		if (!path) return dist;
-		const pl = pathLength(path);
-		const effDir = (dir * motionSign) as 1 | -1;
-		const remainingT = effDir === 1 ? 1 - t : t;
-		const remainingDist = remainingT * pl;
-		dist += remainingDist;
-		if (dist > maxDist) return Infinity;
-		const exitDir = effDir === 1 ? path.to : path.from;
-		const nx = x + dx[exitDir];
-		const ny = y + dy[exitDir];
-		const entryDir = opposite(exitDir);
-		const nextPiece = getPiece(nx, ny);
-		if (!nextPiece) return dist;
-		const nextPaths = pathsOf(nextPiece);
-		const candidates: { idx: number; entry: 'from' | 'to' }[] = [];
-		for (let i = 0; i < nextPaths.length; i++) {
-			if (nextPaths[i].from === entryDir) candidates.push({ idx: i, entry: 'from' });
-			else if (nextPaths[i].to === entryDir) candidates.push({ idx: i, entry: 'to' });
-		}
-		if (candidates.length === 0) return dist;
-		let chosen = candidates[0];
-		if (candidates.length > 1) {
-			const tk = cellKey(nx, ny);
-			let matched: { idx: number; entry: 'from' | 'to' } | null = null;
-			for (let k = cursor; k < loco.routingTrail.length; k++) {
-				const r = loco.routingTrail[k];
-				if (r.tileKey === tk && r.entryPort === entryDir) {
-					const c = candidates.find((cn) => cn.idx === r.pathIdx);
-					if (c) {
-						matched = c;
-						cursor = k + 1;
-						break;
-					}
-				}
-			}
-			if (matched) chosen = matched;
-			else {
-				const active = nextPiece.active ?? 0;
-				chosen = candidates.find((c) => c.idx === active) ?? candidates[0];
-			}
-		}
-		x = nx;
-		y = ny;
-		pathIdx = chosen.idx;
-		const newEff = (chosen.entry === 'from' ? 1 : -1) as 1 | -1;
-		dir = (newEff * motionSign) as 1 | -1;
-		t = chosen.entry === 'from' ? 0 : 1;
+	const walker = walkRoute(walkStart(leader), motionSign, loco.routingTrail, maxDist);
+	while (true) {
+		const r = walker.next();
+		if (r.done) return r.value.kind === 'deadEnd' ? r.value.distance : Infinity;
 	}
-	return Infinity;
 }
 
 // Distance below which the leader is considered "at" a dead end. The braking
@@ -502,15 +528,13 @@ function distanceToDeadEnd(loco: Loco, maxDist: number): number {
 // seconds; at 0.05 of a tile (2px at the default zoom) the gap is invisible.
 const DEAD_END_SNAP = 0.05;
 
-// Read-only walk forward along the loco's intended route. Returns the distance
-// (in tile units) from this train's leading vehicle (loco when going forward,
-// rear wagon when reversing) to the nearest point occupied by some other
-// train's loco or wagon, or +Infinity if none within `maxDist`.
+// Distance from this train's leading vehicle (loco when going forward, rear
+// wagon when reversing) to the nearest point occupied by some other train's
+// loco or wagon, or +Infinity if none within `maxDist`.
 //
 // Two vehicles count as colliding when they share the same tile AND the same
 // pathIdx; vehicles on a different pathIdx of the same switch tile are on a
-// physically separate branch and don't block. Mirrors `step`'s routing
-// decisions so the brake point lines up with where the loco will actually go.
+// physically separate branch and don't block.
 function distanceToNextVehicle(loco: Loco, maxDist: number): number {
 	if (loco.reverser === 0) return Infinity;
 	const motionSign = loco.reverser as 1 | -1;
@@ -518,85 +542,30 @@ function distanceToNextVehicle(loco: Loco, maxDist: number): number {
 	const leader: Vehicle =
 		motionSign === -1 && loco.wagons.length > 0 ? loco.wagons[loco.wagons.length - 1] : loco;
 	const own = new Set<Vehicle>([loco, ...loco.wagons]);
-	let x = leader.x;
-	let y = leader.y;
-	let pathIdx = leader.pathIdx;
-	let t = leader.t;
-	let dir = leader.dir;
-	let cursor = leader.routingCursor;
-	let dist = 0;
-	let safety = 64;
-	while (dist <= maxDist && safety-- > 0) {
-		const piece = getPiece(x, y);
-		if (!piece) return Infinity;
-		const paths = pathsOf(piece);
-		const path = paths[pathIdx];
-		const pl = pathLength(path);
-		const effDir = (dir * motionSign) as 1 | -1;
+	const walker = walkRoute(walkStart(leader), motionSign, loco.routingTrail, maxDist);
+	while (true) {
+		const r = walker.next();
+		if (r.done) return Infinity;
+		const tile = r.value;
 		let nearest = Infinity;
 		for (const other of sim.locos) {
 			const vs: Vehicle[] = [other, ...other.wagons];
 			for (const v of vs) {
 				if (own.has(v)) continue;
-				if (v.x !== x || v.y !== y || v.pathIdx !== pathIdx) continue;
+				if (v.x !== tile.x || v.y !== tile.y || v.pathIdx !== tile.pathIdx) continue;
 				let segDist: number;
-				if (effDir === 1) {
-					if (v.t < t - 1e-9) continue;
-					segDist = (v.t - t) * pl;
+				if (tile.effDir === 1) {
+					if (v.t < tile.t - 1e-9) continue;
+					segDist = (v.t - tile.t) * tile.pl;
 				} else {
-					if (v.t > t + 1e-9) continue;
-					segDist = (t - v.t) * pl;
+					if (v.t > tile.t + 1e-9) continue;
+					segDist = (tile.t - v.t) * tile.pl;
 				}
 				if (segDist < nearest) nearest = segDist;
 			}
 		}
-		if (nearest < Infinity) return dist + nearest;
-		const remainingT = effDir === 1 ? 1 - t : t;
-		const remainingDist = remainingT * pl;
-		dist += remainingDist;
-		if (dist > maxDist) return Infinity;
-		const exitDir = effDir === 1 ? path.to : path.from;
-		const nx = x + dx[exitDir];
-		const ny = y + dy[exitDir];
-		const entryDir = opposite(exitDir);
-		const nextPiece = getPiece(nx, ny);
-		if (!nextPiece) return Infinity;
-		const nextPaths = pathsOf(nextPiece);
-		const candidates: { idx: number; entry: 'from' | 'to' }[] = [];
-		for (let i = 0; i < nextPaths.length; i++) {
-			if (nextPaths[i].from === entryDir) candidates.push({ idx: i, entry: 'from' });
-			else if (nextPaths[i].to === entryDir) candidates.push({ idx: i, entry: 'to' });
-		}
-		if (candidates.length === 0) return Infinity;
-		let chosen = candidates[0];
-		if (candidates.length > 1) {
-			const tk = cellKey(nx, ny);
-			let matched: { idx: number; entry: 'from' | 'to' } | null = null;
-			for (let k = cursor; k < loco.routingTrail.length; k++) {
-				const r = loco.routingTrail[k];
-				if (r.tileKey === tk && r.entryPort === entryDir) {
-					const c = candidates.find((cn) => cn.idx === r.pathIdx);
-					if (c) {
-						matched = c;
-						cursor = k + 1;
-						break;
-					}
-				}
-			}
-			if (matched) chosen = matched;
-			else {
-				const active = nextPiece.active ?? 0;
-				chosen = candidates.find((c) => c.idx === active) ?? candidates[0];
-			}
-		}
-		x = nx;
-		y = ny;
-		pathIdx = chosen.idx;
-		const newEff = (chosen.entry === 'from' ? 1 : -1) as 1 | -1;
-		dir = (newEff * motionSign) as 1 | -1;
-		t = chosen.entry === 'from' ? 0 : 1;
+		if (nearest < Infinity) return tile.distAtStart + nearest;
 	}
-	return Infinity;
 }
 
 // True if stopping the loco at `stationKey` would actually do something —

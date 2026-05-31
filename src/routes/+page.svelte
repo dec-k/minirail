@@ -3,6 +3,7 @@
 	import ToolPalette from '$lib/components/ToolPalette.svelte';
 	import LocoPanel from '$lib/components/LocoPanel.svelte';
 	import MainMenu from '$lib/components/MainMenu.svelte';
+	import AtmosphereControls from '$lib/components/AtmosphereControls.svelte';
 	import LandingScreen from '$lib/components/LandingScreen.svelte';
 	import { doc } from '$lib/railway/doc.svelte';
 	import { fade, fly } from 'svelte/transition';
@@ -51,9 +52,10 @@
 		</div>
 
 		<div
-			class="pointer-events-auto absolute top-4 right-4"
+			class="pointer-events-auto absolute top-4 right-4 flex items-start gap-2"
 			in:fly={{ y: -12, duration: 450, delay: 400, easing: cubicOut }}
 		>
+			<AtmosphereControls />
 			<MainMenu />
 		</div>
 

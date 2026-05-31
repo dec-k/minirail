@@ -31,6 +31,7 @@
 	import Vehicle from './board/Vehicle.svelte';
 	import LocoBadge from './board/LocoBadge.svelte';
 	import ParticleLayer from './board/ParticleLayer.svelte';
+	import LightingLayer from './board/LightingLayer.svelte';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' | 'pan';
 
@@ -86,6 +87,15 @@
 						...wp
 					});
 			}
+		}
+		return out;
+	});
+
+	const locoLights = $derived.by(() => {
+		const out: { key: string; x: number; y: number; heading: number }[] = [];
+		for (const l of sim.locos) {
+			const lp = poseOf(l);
+			if (lp) out.push({ key: `light-${l.id}`, x: lp.x, y: lp.y, heading: lp.heading });
 		}
 		return out;
 	});
@@ -379,14 +389,13 @@
 			return { x, y, groundOver };
 		})
 	);
-
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	class="absolute inset-0 overflow-hidden bg-background touch-pinch-zoom"
+	class="absolute inset-0 touch-pinch-zoom overflow-hidden bg-background"
 	class:cursor-grab={tool === 'pan' && pan === null}
 	class:cursor-grabbing={pan !== null}
 	onwheel={handleWheel}
@@ -397,82 +406,82 @@
 	onauxclick={(e) => e.preventDefault()}
 	oncontextmenu={(e) => e.preventDefault()}
 >
-<div
-	class="absolute top-0 left-0 origin-top-left overflow-hidden rounded-lg bg-board-bg shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
-	style="transform: translate({panX}px, {panY}px) scale({zoom})"
->
-	<svg
-		viewBox="0 0 {widthPx} {heightPx}"
-		width={widthPx}
-		height={heightPx}
-		class="block select-none"
-		class:cursor-crosshair={tool === 'draw'}
-		onclick={handleClick}
-		onpointerdown={handlePointerDown}
-		onpointermove={handlePointerMove}
-		onpointerup={handlePointerUp}
-		onpointercancel={handlePointerUp}
-		role="img"
-		aria-label="Track grid"
+	<div
+		class="absolute top-0 left-0 origin-top-left overflow-hidden rounded-lg bg-board-bg shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
+		style="transform: translate({panX}px, {panY}px) scale({zoom})"
 	>
-		<defs>
-			<pattern id="gridPattern" width={TILE} height={TILE} patternUnits="userSpaceOnUse">
-				<path
-					d={`M ${TILE} 0 L 0 0 0 ${TILE}`}
-					fill="none"
-					class="stroke-board-grid"
-					stroke-width="1"
+		<svg
+			viewBox="0 0 {widthPx} {heightPx}"
+			width={widthPx}
+			height={heightPx}
+			class="block select-none"
+			class:cursor-crosshair={tool === 'draw'}
+			onclick={handleClick}
+			onpointerdown={handlePointerDown}
+			onpointermove={handlePointerMove}
+			onpointerup={handlePointerUp}
+			onpointercancel={handlePointerUp}
+			role="img"
+			aria-label="Track grid"
+		>
+			<defs>
+				<pattern id="gridPattern" width={TILE} height={TILE} patternUnits="userSpaceOnUse">
+					<path
+						d={`M ${TILE} 0 L 0 0 0 ${TILE}`}
+						fill="none"
+						class="stroke-board-grid"
+						stroke-width="1"
+					/>
+				</pattern>
+			</defs>
+
+			<rect width={widthPx} height={heightPx} fill="url(#gridPattern)" />
+
+			{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
+				<GroundOverTile {x} {y} kind={groundOver.kind} />
+			{/each}
+
+			{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
+				<DecorationTile {x} {y} kind={decoration.kind} />
+			{/each}
+
+			{#each cellEntries as { x, y, piece } (`${x},${y}`)}
+				<TrackTile {x} {y} {piece} />
+			{/each}
+
+			{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
+				<StationTile {x} {y} {station} />
+			{/each}
+
+			{#each vehiclePoses as pose (pose.key)}
+				<Vehicle
+					kind={pose.kind}
+					color={pose.color}
+					occupied={pose.occupied}
+					x={pose.x}
+					y={pose.y}
+					heading={pose.heading}
 				/>
-			</pattern>
-		</defs>
-
-		<rect width={widthPx} height={heightPx} fill="url(#gridPattern)" />
-
-		{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
-			<GroundOverTile {x} {y} kind={groundOver.kind} />
-		{/each}
-
-		{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
-			<DecorationTile {x} {y} kind={decoration.kind} />
-		{/each}
-
-		{#each cellEntries as { x, y, piece } (`${x},${y}`)}
-			<TrackTile {x} {y} {piece} />
-		{/each}
-
-		{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
-			<StationTile {x} {y} {station} />
-		{/each}
-
-		{#each vehiclePoses as pose (pose.key)}
-			<Vehicle
-				kind={pose.kind}
-				color={pose.color}
-				occupied={pose.occupied}
-				x={pose.x}
-				y={pose.y}
-				heading={pose.heading}
-			/>
-		{/each}
-
-	</svg>
-	<ParticleLayer {widthPx} {heightPx} />
-	<svg
-		viewBox="0 0 {widthPx} {heightPx}"
-		width={widthPx}
-		height={heightPx}
-		class="pointer-events-none absolute top-0 left-0 block select-none"
-		role="presentation"
-	>
-		{#each locoBadges as b (b.key)}
-			<LocoBadge
-				x={b.x}
-				y={b.y}
-				passengers={b.passengers}
-				capacity={b.capacity}
-				boarding={b.boarding}
-			/>
-		{/each}
-	</svg>
-</div>
+			{/each}
+		</svg>
+		<ParticleLayer {widthPx} {heightPx} />
+		<LightingLayer {widthPx} {heightPx} {locoLights} />
+		<svg
+			viewBox="0 0 {widthPx} {heightPx}"
+			width={widthPx}
+			height={heightPx}
+			class="pointer-events-none absolute top-0 left-0 block select-none"
+			role="presentation"
+		>
+			{#each locoBadges as b (b.key)}
+				<LocoBadge
+					x={b.x}
+					y={b.y}
+					passengers={b.passengers}
+					capacity={b.capacity}
+					boarding={b.boarding}
+				/>
+			{/each}
+		</svg>
+	</div>
 </div>

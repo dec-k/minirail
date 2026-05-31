@@ -14,7 +14,9 @@
 			{@const nE = getDecoration(x + 1, y)?.kind === 'water'}
 			{@const nS = getDecoration(x, y + 1)?.kind === 'water'}
 			{@const nW = getDecoration(x - 1, y)?.kind === 'water'}
-			<rect width={TILE} height={TILE} fill="#3a8fc7" />
+			<!-- Bleed the fill a hair past the cell edges so adjacent water tiles
+			     overlap and the grey grid pattern can't show through the seams. -->
+			<rect x={-0.6} y={-0.6} width={TILE + 1.2} height={TILE + 1.2} fill="#3a8fc7" />
 			{#each waveGlints(x, y) as g, i (i)}
 				<line
 					x1={(g.cx - g.len * 0.5) * TILE}
@@ -115,8 +117,7 @@
 				{@const roofPeak = bodyTop - w * 0.45}
 				{@const overhang = w * 0.08}
 				{@const body = h.tone > 0.5 ? '#f0dfc2' : '#e0cfae'}
-				{@const roof =
-					h.roofTone < 0.34 ? '#a04d3a' : h.roofTone < 0.67 ? '#7a5535' : '#5a6072'}
+				{@const roof = h.roofTone < 0.34 ? '#a04d3a' : h.roofTone < 0.67 ? '#7a5535' : '#5a6072'}
 				<ellipse
 					{cx}
 					cy={bodyBot + w * 0.06}

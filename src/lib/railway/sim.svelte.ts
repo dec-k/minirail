@@ -15,7 +15,7 @@ import {
 import { pathsOf } from './pieces';
 import { pathLength, sample } from './geometry';
 import { getPiece, grid, toggleAt } from './grid.svelte';
-import { hasActiveParticles, spawnSteam, tickParticles } from './particles.svelte';
+import { hasActiveParticles, spawnSparks, spawnSteam, tickParticles } from './particles.svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { markDirty } from './doc.svelte';
 
@@ -52,16 +52,24 @@ const STEAM_INTERVAL = 0.09;
 const steamTimers = new SvelteMap<number, number>();
 
 function maybeSpawnSteam(l: Loco, dt: number) {
-	if (!locoIsMoving(l)) {
+	const moving = locoIsMoving(l);
+	// Idle locos puff slow white billows only while paused boarding at a station;
+	// otherwise they go quiet.
+	const boarding = l.boardingAt !== null;
+	if (!moving && !boarding) {
 		steamTimers.delete(l.id);
 		return;
 	}
+	// Working hard (accelerating / high speed) chuffs faster and sootier; an
+	// idling loco at a platform sighs out sparse, pale, fat puffs.
+	const speedFrac = Math.min(1, l.speed / MAX_THROTTLE);
+	const interval = moving ? STEAM_INTERVAL * (1.6 - speedFrac) : 0.5;
 	const timer = (steamTimers.get(l.id) ?? 0) + dt;
-	if (timer < STEAM_INTERVAL) {
+	if (timer < interval) {
 		steamTimers.set(l.id, timer);
 		return;
 	}
-	steamTimers.set(l.id, timer - STEAM_INTERVAL);
+	steamTimers.set(l.id, timer - interval);
 	const piece = getPiece(l.x, l.y);
 	if (!piece) return;
 	const path = pathsOf(piece)[l.pathIdx];
@@ -74,9 +82,37 @@ function maybeSpawnSteam(l: Loco, dt: number) {
 	// rearward with a perpendicular jitter so consecutive puffs don't line up.
 	const chX = l.x + s.x + cosH * 0.18;
 	const chY = l.y + s.y + sinH * 0.18;
-	const drift = 0.25;
+	const drift = moving ? 0.25 + speedFrac * 0.35 : 0.06;
 	const jitter = (Math.random() - 0.5) * 0.35;
-	spawnSteam(chX, chY, -cosH * drift + -sinH * jitter, -sinH * drift + cosH * jitter);
+	const soot = moving ? 0.25 + speedFrac * 0.55 : 0;
+	const size = moving ? 0.2 + speedFrac * 0.08 : 0.3;
+	const life = moving ? 0.9 : 1.4;
+	spawnSteam(
+		chX,
+		chY,
+		-cosH * drift + -sinH * jitter,
+		-sinH * drift + cosH * jitter,
+		soot,
+		size,
+		life
+	);
+}
+
+// World position of a vehicle, or null if it sits on a missing tile.
+function vehicleWorldPos(v: Vehicle): { x: number; y: number } | null {
+	const piece = getPiece(v.x, v.y);
+	if (!piece) return null;
+	const path = pathsOf(piece)[v.pathIdx];
+	if (!path) return null;
+	const s = sample(path, v.t);
+	return { x: v.x + s.x, y: v.y + s.y };
+}
+
+function emitBrakeSparks(l: Loco) {
+	const sign = l.reverser as 1 | -1;
+	const leader: Vehicle = sign === -1 && l.wagons.length > 0 ? l.wagons[l.wagons.length - 1] : l;
+	const p = vehicleWorldPos(leader);
+	if (p) spawnSparks(p.x, p.y, 2, 1.3);
 }
 
 function findLoco(id: number): Loco | undefined {
@@ -378,9 +414,7 @@ type WalkTile = {
 	first: boolean;
 };
 
-type WalkEnd =
-	| { kind: 'deadEnd'; distance: number }
-	| { kind: 'tooFar' };
+type WalkEnd = { kind: 'deadEnd'; distance: number } | { kind: 'tooFar' };
 
 // Read-only walk along a vehicle's intended route, yielding one entry per tile
 // visited. `distAtStart` is the cumulative distance from `start` to the entry-
@@ -658,7 +692,11 @@ function tickStations(dt: number) {
 function makeSwitchLineCallback(): (x: number, y: number) => void {
 	return (x, y) => {
 		const piece = getPiece(x, y);
-		if (piece && isSwitch(piece.kind)) toggleAt(x, y);
+		if (piece && isSwitch(piece.kind)) {
+			toggleAt(x, y);
+			// The points snapping over throw a little shower of sparks.
+			spawnSparks(x + 0.5, y + 0.5, 6, 1.6);
+		}
 	};
 }
 
@@ -728,6 +766,12 @@ function loop() {
 
 		if (l.speed < target) l.speed = Math.min(target, l.speed + ACCELERATION * dt);
 		else if (l.speed > target) l.speed = Math.max(target, l.speed - DECELERATION * dt);
+
+		// Wheels grinding hard against the rail as a fast train hauls down for an
+		// obstacle throw sparks from under the leading vehicle.
+		if (l.speed > 2.5 && target < l.speed - 0.5 && distToObstacle < APPROACH_DIST) {
+			if (Math.random() < dt * 14) emitBrakeSparks(l);
+		}
 
 		if (l.speed > 1e-6 && l.reverser !== 0) {
 			let dist = l.speed * dt;

@@ -6,24 +6,51 @@
 
 	let canvasEl: HTMLCanvasElement | undefined = $state();
 
+	function drawSteam(ctx: CanvasRenderingContext2D, p: (typeof particles.list)[number]) {
+		const t = Math.min(1, p.life / p.maxLife);
+		const cx = p.x * TILE;
+		const cy = p.y * TILE;
+		const r = (0.1 + t * p.size * 1.4) * TILE;
+		const alpha = (1 - t) * 0.55;
+		// Sootier puffs leave the stack dark and lighten as they cool and disperse.
+		const lightAnchor = 220;
+		const start = lightAnchor - p.soot * 170;
+		const tint = Math.floor(start + (lightAnchor - start) * t);
+		const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+		grad.addColorStop(0, `rgba(${tint},${tint},${tint},${alpha})`);
+		grad.addColorStop(0.5, `rgba(${tint},${tint},${tint},${alpha * 0.45})`);
+		grad.addColorStop(1, `rgba(${tint},${tint},${tint},0)`);
+		ctx.fillStyle = grad;
+		ctx.beginPath();
+		ctx.arc(cx, cy, r, 0, Math.PI * 2);
+		ctx.fill();
+	}
+
 	function drawParticles(ctx: CanvasRenderingContext2D) {
 		ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+		// Sparks composite additively for a glowing ember look; steam uses normal
+		// alpha. Draw steam first, then the additive spark glow pass.
 		for (const p of particles.list) {
+			if (p.kind === 'steam') drawSteam(ctx, p);
+		}
+		ctx.globalCompositeOperation = 'lighter';
+		for (const p of particles.list) {
+			if (p.kind !== 'spark') continue;
 			const t = Math.min(1, p.life / p.maxLife);
 			const cx = p.x * TILE;
 			const cy = p.y * TILE;
-			const r = (0.1 + t * 0.22) * TILE;
-			const alpha = (1 - t) * 0.55;
-			const tint = Math.floor(255 - t * 50);
+			const r = (p.size + 0.02) * TILE;
+			const alpha = (1 - t) * 0.9;
 			const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-			grad.addColorStop(0, `rgba(${tint},${tint},${tint},${alpha})`);
-			grad.addColorStop(0.5, `rgba(${tint},${tint},${tint},${alpha * 0.45})`);
-			grad.addColorStop(1, `rgba(${tint},${tint},${tint},0)`);
+			grad.addColorStop(0, `rgba(255,248,200,${alpha})`);
+			grad.addColorStop(0.4, `rgba(255,176,64,${alpha * 0.8})`);
+			grad.addColorStop(1, 'rgba(255,120,0,0)');
 			ctx.fillStyle = grad;
 			ctx.beginPath();
 			ctx.arc(cx, cy, r, 0, Math.PI * 2);
 			ctx.fill();
 		}
+		ctx.globalCompositeOperation = 'source-over';
 	}
 
 	// Local rAF loop. Runs while particles exist, plus one final frame after the

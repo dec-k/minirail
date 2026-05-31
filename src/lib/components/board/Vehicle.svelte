@@ -17,17 +17,18 @@
 		heading: number;
 	} = $props();
 
-	function darken(hex: string): string {
+	function shift(hex: string, d: number): string {
 		const m = /^#([0-9a-f]{6})$/i.exec(hex);
 		if (!m) return hex;
 		const n = parseInt(m[1], 16);
-		const r = Math.max(0, ((n >> 16) & 0xff) - 60);
-		const g = Math.max(0, ((n >> 8) & 0xff) - 60);
-		const b = Math.max(0, (n & 0xff) - 60);
+		const r = Math.max(0, Math.min(255, ((n >> 16) & 0xff) + d));
+		const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + d));
+		const b = Math.max(0, Math.min(255, (n & 0xff) + d));
 		return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 	}
 
-	const dark = $derived(darken(color));
+	const dark = $derived(shift(color, -60));
+	const light = $derived(shift(color, 48));
 </script>
 
 <g transform="translate({x} {y}) rotate({heading})">
@@ -48,6 +49,8 @@
 		<rect x={-TILE * 0.22} y={halfH - 1} width={TILE * 0.07} height="3" fill="#222" />
 		<rect x={TILE * 0.06} y={-halfH - 2} width={TILE * 0.07} height="3" fill="#222" />
 		<rect x={TILE * 0.06} y={halfH - 1} width={TILE * 0.07} height="3" fill="#222" />
+
+		<!-- Body with a top-edge specular highlight and a darker cab section. -->
 		<rect
 			x={bodyL}
 			y={-halfH}
@@ -59,6 +62,15 @@
 			stroke-width="1.5"
 		/>
 		<rect
+			x={bodyL + 1.5}
+			y={-halfH + 1.5}
+			width={TILE * 0.6}
+			height={halfH * 0.5}
+			rx={TILE * 0.05}
+			fill={light}
+			fill-opacity="0.55"
+		/>
+		<rect
 			x={bodyL}
 			y={-halfH}
 			width={TILE * 0.22}
@@ -67,6 +79,7 @@
 			fill={dark}
 			fill-opacity="0.55"
 		/>
+		<!-- Cab window glow -->
 		<rect
 			x={bodyL + TILE * 0.05}
 			y={-TILE * 0.08}
@@ -75,16 +88,21 @@
 			rx="1.5"
 			fill="#fde68a"
 		/>
-		<circle cx={TILE * 0.05} cy="0" r={TILE * 0.065} fill="#1a1a1a" />
-		<circle cx={TILE * 0.05} cy="0" r={TILE * 0.04} fill="#555" />
+		<!-- Chimney / stack: sits where the steam particles spawn. -->
+		<circle cx={TILE * 0.18} cy="0" r={TILE * 0.085} fill="#1a1a1a" />
+		<circle cx={TILE * 0.18} cy="0" r={TILE * 0.05} fill="#3a3a3a" />
+		<!-- Steam dome -->
+		<circle cx={-TILE * 0.02} cy="0" r={TILE * 0.06} fill={dark} />
+		<!-- Headlight -->
 		<circle
 			cx={bodyR - TILE * 0.03}
 			cy="0"
-			r={TILE * 0.04}
+			r={TILE * 0.045}
 			fill="#fef3c7"
 			stroke="#92400e"
 			stroke-width="0.5"
 		/>
+		<!-- Cowcatcher -->
 		<polygon
 			points="{bodyR},{-halfH + 1} {bodyR + TILE * 0.09},0 {bodyR},{halfH - 1}"
 			fill="#3a3a3a"
@@ -109,6 +127,7 @@
 		<rect x={-TILE * 0.18} y={whalfH - 1} width={TILE * 0.07} height="3" fill="#222" />
 		<rect x={TILE * 0.11} y={-whalfH - 2} width={TILE * 0.07} height="3" fill="#222" />
 		<rect x={TILE * 0.11} y={whalfH - 1} width={TILE * 0.07} height="3" fill="#222" />
+
 		<rect
 			x={wL}
 			y={-whalfH}
@@ -119,15 +138,17 @@
 			stroke={dark}
 			stroke-width="1.5"
 		/>
+		<rect
+			x={wL + 1.5}
+			y={-whalfH + 1.5}
+			width={TILE * 0.5}
+			height={whalfH * 0.5}
+			rx={TILE * 0.04}
+			fill={light}
+			fill-opacity="0.5"
+		/>
 		{#if occupied}
-			<circle
-				cx="0"
-				cy="0"
-				r={TILE * 0.06}
-				fill="#fbe49d"
-				stroke="#7a5535"
-				stroke-width="0.7"
-			/>
+			<circle cx="0" cy="0" r={TILE * 0.06} fill="#fbe49d" stroke="#7a5535" stroke-width="0.7" />
 		{/if}
 	{/if}
 </g>

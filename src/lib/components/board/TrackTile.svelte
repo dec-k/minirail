@@ -37,6 +37,7 @@
 		<rect width={TILE} height={TILE} class="fill-foreground/3" />
 		{#each ordered as { p, i, inactive } (i)}
 			<path
+				class="tpath"
 				d={svgPathD(p, TILE)}
 				fill="none"
 				stroke={inactive ? '#d6cdb8' : '#c8a878'}
@@ -46,6 +47,7 @@
 			/>
 			{#each sleeperTicks(p, 5, TILE * 0.21) as tick, k (k)}
 				<line
+					class="tpath"
 					x1={tick.cx - tick.nx}
 					y1={tick.cy - tick.ny}
 					x2={tick.cx + tick.nx}
@@ -59,18 +61,29 @@
 			<path
 				d={svgPathD(p, TILE)}
 				fill="none"
-				class={inactive ? 'stroke-track-inactive' : 'stroke-track-active'}
+				class={inactive ? 'tpath stroke-track-inactive' : 'tpath stroke-track-active'}
 				stroke-width={Math.round(TILE * 0.22)}
 				stroke-linecap="butt"
 				opacity={inactive ? 0.6 : 1}
 			/>
 			<path
+				class="tpath"
 				d={svgPathD(p, TILE)}
 				fill="none"
 				stroke={inactive ? '#d6cdb8' : '#c8a878'}
 				stroke-width={Math.round(TILE * 0.12)}
 				stroke-linecap="butt"
 				opacity={inactive ? 0.7 : 1}
+			/>
+			<!-- Specular glint down the polished rail. -->
+			<path
+				class="tpath"
+				d={svgPathD(p, TILE)}
+				fill="none"
+				stroke="#fffaf0"
+				stroke-width={Math.max(1, Math.round(TILE * 0.035))}
+				stroke-linecap="butt"
+				opacity={inactive ? 0.12 : 0.34}
 			/>
 		{/each}
 		{#if switchTile}
@@ -83,3 +96,18 @@
 		{/if}
 	</g>
 </g>
+
+<style>
+	/* Smoothly cross-fade a branch between active and inactive when a switch is
+	   thrown, instead of snapping. */
+	.tpath {
+		transition:
+			opacity 220ms ease,
+			stroke 220ms ease;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.tpath {
+			transition: none;
+		}
+	}
+</style>

@@ -128,7 +128,7 @@
 		>
 			<Button
 				size="lg"
-				class="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 font-bold text-white"
+				class="flex-1 bg-linear-to-r from-blue-500 to-purple-500 font-bold text-white"
 				onclick={startNew}
 			>
 				<TrainTrack />

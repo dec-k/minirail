@@ -23,7 +23,6 @@
 		type Dir,
 		type PieceKind
 	} from '$lib/railway/types';
-	import { particles } from '$lib/railway/particles.svelte';
 	import { TILE } from './board/constants';
 	import GroundOverTile from './board/GroundOverTile.svelte';
 	import DecorationTile from './board/DecorationTile.svelte';
@@ -31,6 +30,7 @@
 	import StationTile from './board/StationTile.svelte';
 	import Vehicle from './board/Vehicle.svelte';
 	import LocoBadge from './board/LocoBadge.svelte';
+	import ParticleLayer from './board/ParticleLayer.svelte';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' | 'pan';
 
@@ -380,48 +380,6 @@
 		})
 	);
 
-	// Canvas-based particle renderer. Sits above the SVG inside the same
-	// transformed wrapper so pan/zoom are inherited for free. Driven by a local
-	// rAF that runs only while particles exist (or to clear one final frame).
-	let canvasEl: HTMLCanvasElement | undefined = $state();
-
-	function drawParticles(ctx: CanvasRenderingContext2D) {
-		ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-		for (const p of particles.list) {
-			const t = Math.min(1, p.life / p.maxLife);
-			const cx = p.x * TILE;
-			const cy = p.y * TILE;
-			const r = (0.1 + t * 0.22) * TILE;
-			const alpha = (1 - t) * 0.55;
-			const tint = Math.floor(255 - t * 50);
-			const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-			grad.addColorStop(0, `rgba(${tint},${tint},${tint},${alpha})`);
-			grad.addColorStop(0.5, `rgba(${tint},${tint},${tint},${alpha * 0.45})`);
-			grad.addColorStop(1, `rgba(${tint},${tint},${tint},0)`);
-			ctx.fillStyle = grad;
-			ctx.beginPath();
-			ctx.arc(cx, cy, r, 0, Math.PI * 2);
-			ctx.fill();
-		}
-	}
-
-	$effect(() => {
-		if (!canvasEl) return;
-		const ctx = canvasEl.getContext('2d');
-		if (!ctx) return;
-		let raf = 0;
-		let lastDrewCount = 0;
-		const frame = () => {
-			const n = particles.list.length;
-			if (n > 0 || lastDrewCount > 0) {
-				drawParticles(ctx);
-				lastDrewCount = n;
-			}
-			raf = requestAnimationFrame(frame);
-		};
-		raf = requestAnimationFrame(frame);
-		return () => cancelAnimationFrame(raf);
-	});
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -498,13 +456,7 @@
 		{/each}
 
 	</svg>
-	<canvas
-		bind:this={canvasEl}
-		width={widthPx}
-		height={heightPx}
-		class="pointer-events-none absolute top-0 left-0"
-		style="width: {widthPx}px; height: {heightPx}px;"
-	></canvas>
+	<ParticleLayer {widthPx} {heightPx} />
 	<svg
 		viewBox="0 0 {widthPx} {heightPx}"
 		width={widthPx}

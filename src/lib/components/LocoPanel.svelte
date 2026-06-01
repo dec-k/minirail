@@ -5,12 +5,14 @@
 		setThrottle,
 		setAutoReverse,
 		setSwitchLine,
+		setLocoName,
+		setLocoColor,
 		removeLoco,
 		addWagon,
 		removeWagon,
 		THROTTLE_LEVELS
 	} from '$lib/railway/sim.svelte';
-	import type { Reverser } from '$lib/railway/types';
+	import { LOCO_COLORS, type Reverser } from '$lib/railway/types';
 	import { Button } from '$lib/components/ui/button';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import {
@@ -73,6 +75,11 @@
 		openId = openId === id ? null : id;
 	}
 
+	// Display label: the user's name when set, otherwise the stable `Loco {id}`.
+	function locoLabel(l: { id: number; name: string }): string {
+		return l.name.trim() || `Loco ${l.id}`;
+	}
+
 	// Two-step delete: the header trash icon arms a red "Delete?" confirm rather
 	// than removing on the first click, so a stray tap where a close button would
 	// normally sit can't destroy a loco. The armed state auto-disarms after a few
@@ -128,9 +135,7 @@
 		const border = active ? color : `color-mix(in srgb, ${color} 35%, var(--border))`;
 		// Active chip gets a loco-coloured ring (offset against the page bg) rather
 		// than the theme ring, so the highlight matches the train it controls.
-		const ring = active
-			? ` box-shadow: 0 0 0 1.5px var(--background), 0 0 0 3.5px ${color};`
-			: '';
+		const ring = active ? ` box-shadow: 0 0 0 1.5px var(--background), 0 0 0 3.5px ${color};` : '';
 		return `background-color: color-mix(in srgb, ${color} ${tint}%, var(--card)); border-color: ${border};${ring}`;
 	}
 </script>
@@ -147,16 +152,21 @@
 				out:slide={{ duration: 150, easing: cubicOut, axis: 'y' }}
 			>
 				<!-- Header: identity + collapse + delete. -->
-				<div
-					class="flex items-center gap-2 border-b px-3 py-2"
-					style={headerStyle(openLoco.color)}
-				>
+				<div class="flex items-center gap-2 border-b px-3 py-2" style={headerStyle(openLoco.color)}>
 					<span
-						class="inline-block size-3.5 rounded-full ring-2 ring-background"
+						class="inline-block size-3.5 shrink-0 rounded-full ring-2 ring-background"
 						style="background-color: {openLoco.color}"
 						aria-hidden="true"
 					></span>
-					<span class="text-sm font-semibold tabular-nums">Loco {openLoco.id}</span>
+					<input
+						type="text"
+						value={openLoco.name}
+						oninput={(e) => setLocoName(openLoco.id, e.currentTarget.value)}
+						placeholder="Loco {openLoco.id}"
+						aria-label="Name for Loco {openLoco.id}"
+						maxlength="40"
+						class="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-0.5 text-sm font-semibold outline-none placeholder:font-semibold placeholder:text-foreground/55 hover:bg-foreground/5 focus:bg-foreground/10"
+					/>
 					<Button
 						variant="ghost"
 						size="icon-sm"
@@ -193,6 +203,26 @@
 				</div>
 
 				<div class="flex flex-col gap-2 p-3">
+					<!-- Colour palette: pick from the shared loco palette. The selected
+					     swatch gets a ring offset against the body so it reads as active. -->
+					<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Loco colour">
+						{#each LOCO_COLORS as c (c)}
+							{@const selected = openLoco.color === c}
+							<button
+								type="button"
+								class="size-6 rounded-full border border-black/10 transition active:scale-90 {selected
+									? ''
+									: 'hover:scale-110'}"
+								style="background-color: {c};{selected
+									? ` box-shadow: 0 0 0 2px var(--card), 0 0 0 4px ${c};`
+									: ''}"
+								onclick={() => setLocoColor(openLoco.id, c)}
+								aria-label="Set colour {c}"
+								aria-pressed={selected}
+							></button>
+						{/each}
+					</div>
+
 					<!-- Drive controls: direction + speed. Segments stretch full-width on
 					     mobile, shrink to natural width on desktop. -->
 					<div class="flex flex-wrap items-center justify-between gap-2">
@@ -301,14 +331,14 @@
 					style={chipStyle(loco.color, active)}
 					onclick={() => toggle(loco.id)}
 					aria-pressed={active}
-					title="Loco {loco.id}"
+					title={locoLabel(loco)}
 				>
 					<span
-						class="size-2.5 rounded-full ring-1 ring-background"
+						class="size-2.5 shrink-0 rounded-full ring-1 ring-background"
 						style="background-color: {loco.color}"
 						aria-hidden="true"
 					></span>
-					{loco.id}
+					<span class="max-w-[10ch] truncate">{loco.name.trim() || loco.id}</span>
 				</button>
 			{/each}
 		</div>

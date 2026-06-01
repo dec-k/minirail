@@ -102,6 +102,7 @@ export function placeLoco(x: number, y: number) {
 	sim.locos.push({
 		id: nextLocoId++,
 		color: pickColor(),
+		name: '',
 		x,
 		y,
 		pathIdx: 0,
@@ -151,6 +152,7 @@ export type SavedLocoState = {
 	t: number;
 	dir: 1 | -1;
 	color: string;
+	name?: string;
 	wagons: number;
 	reverser?: Reverser;
 	throttle?: number;
@@ -172,6 +174,7 @@ export function replaceLocos(saved: SavedLocoState[]) {
 		const loco: Loco = {
 			id: nextLocoId++,
 			color: s.color,
+			name: s.name ?? '',
 			x: s.x,
 			y: s.y,
 			pathIdx: s.pathIdx,
@@ -386,9 +389,7 @@ type WalkTile = {
 	first: boolean;
 };
 
-type WalkEnd =
-	| { kind: 'deadEnd'; distance: number }
-	| { kind: 'tooFar' };
+type WalkEnd = { kind: 'deadEnd'; distance: number } | { kind: 'tooFar' };
 
 // Read-only walk along a vehicle's intended route, yielding one entry per tile
 // visited. `distAtStart` is the cumulative distance from `start` to the entry-
@@ -806,6 +807,27 @@ export function setSwitchLine(id: number, on: boolean) {
 	if (!loco) return;
 	if (loco.switchLine === on) return;
 	loco.switchLine = on;
+	markDirty();
+}
+
+export function setLocoName(id: number, name: string) {
+	const loco = findLoco(id);
+	if (!loco) return;
+	// Cap length so a runaway paste can't blow out the header / chip layout.
+	const next = name.slice(0, 40);
+	if (next === loco.name) return;
+	loco.name = next;
+	markDirty();
+}
+
+// Only colours from the shared palette are accepted, so saves stay within the
+// known set and every loco keeps a theme-safe, contrast-checked colour.
+export function setLocoColor(id: number, color: string) {
+	const loco = findLoco(id);
+	if (!loco) return;
+	if (!LOCO_COLORS.includes(color)) return;
+	if (color === loco.color) return;
+	loco.color = color;
 	markDirty();
 }
 

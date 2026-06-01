@@ -53,6 +53,9 @@ export type Wagon = Vehicle;
 export type Loco = Vehicle & {
 	id: number;
 	color: string;
+	// User-assigned display name. Empty string means "unnamed" — the UI falls
+	// back to `Loco {id}` for display so a name is never required.
+	name: string;
 	reverser: Reverser;
 	throttle: number;
 	// Current actual travel speed in tile-units/sec. Ramps toward the throttle

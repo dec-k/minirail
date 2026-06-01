@@ -19,11 +19,12 @@ import {
 } from './types';
 import { setLoaded, markClean, clearLoaded } from './doc.svelte';
 
-export const SCHEMA_VERSION = 4 as const;
+export const SCHEMA_VERSION = 5 as const;
 // Older save versions we can still read. Each one needs an explicit upgrade
-// path in `parseLayout`. v4 added per-loco reverser + throttle; earlier saves
-// omit them and load with the neutral / default-throttle fallbacks.
-const SUPPORTED_VERSIONS = new Set([1, 2, 3, 4]);
+// path in `parseLayout`. v4 added per-loco reverser + throttle; v5 added the
+// per-loco name. Earlier saves omit these and load with the neutral /
+// default-throttle / unnamed fallbacks.
+const SUPPORTED_VERSIONS = new Set([1, 2, 3, 4, 5]);
 export const STORAGE_PREFIX = 'minirail:save:';
 
 export type SavedCell = {
@@ -86,6 +87,7 @@ export function serializeLayout(name: string): SavedLayout {
 			reverser: l.reverser,
 			throttle: l.throttle
 		};
+		if (l.name.trim()) out.name = l.name;
 		if (l.autoReverse) out.autoReverse = true;
 		if (l.switchLine) out.switchLine = true;
 		return out;
@@ -230,6 +232,7 @@ export function parseLayout(json: string): SavedLayout {
 			color: ll.color,
 			wagons: Math.max(0, Math.floor(ll.wagons))
 		};
+		if (typeof ll.name === 'string' && ll.name.trim()) out.name = ll.name.slice(0, 40);
 		// reverser/throttle were added in schema v4; older saves omit them and
 		// replaceLocos falls back to neutral / default throttle.
 		if (ll.reverser === -1 || ll.reverser === 0 || ll.reverser === 1) {

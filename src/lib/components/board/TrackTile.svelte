@@ -1,10 +1,15 @@
 <script lang="ts">
 	import { pathsOf } from '$lib/railway/pieces';
 	import { sample, svgPathD } from '$lib/railway/geometry';
+	import { getGroundOver } from '$lib/railway/grid.svelte';
 	import { isSwitch, type Piece, type TilePath } from '$lib/railway/types';
 	import { TILE, placeIntro } from './constants';
 
 	let { x, y, piece }: { x: number; y: number; piece: Piece } = $props();
+
+	// When rail sits on a grass/stone groundover (rendered beneath in z-order),
+	// fade the ballast bed slightly so the terrain colour subtly tints it.
+	const ballastFade = $derived(getGroundOver(x, y) ? 0.85 : 1);
 
 	type SleeperTick = { cx: number; cy: number; nx: number; ny: number };
 
@@ -34,7 +39,7 @@
 
 <g transform="translate({x * TILE} {y * TILE})">
 	<g in:placeIntro|local style="transform-box: fill-box; transform-origin: center;">
-		<rect width={TILE} height={TILE} class="fill-foreground/3" />
+		<rect width={TILE} height={TILE} class="fill-foreground/3" opacity={ballastFade} />
 		{#each ordered as { p, i, inactive } (i)}
 			<path
 				class="tpath"
@@ -43,7 +48,7 @@
 				stroke={inactive ? '#d6cdb8' : '#c8a878'}
 				stroke-width={Math.round(TILE * 0.46)}
 				stroke-linecap="butt"
-				opacity={inactive ? 0.65 : 1}
+				opacity={(inactive ? 0.65 : 1) * ballastFade}
 			/>
 			{#each sleeperTicks(p, 5, TILE * 0.21) as tick, k (k)}
 				<line

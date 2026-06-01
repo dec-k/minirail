@@ -1,22 +1,65 @@
 <script lang="ts">
-	import { getDecoration } from '$lib/railway/grid.svelte';
-	import { buildingSpots, treeSpots, waveGlints } from '$lib/railway/decorations';
+	import { getDecoration, getGroundOver } from '$lib/railway/grid.svelte';
+	import {
+		buildingSpots,
+		treeSpots,
+		waveGlints,
+		terrainBlob,
+		terrainEncroachBand,
+		TERRAIN_COLORS
+	} from '$lib/railway/decorations';
 	import type { DecorationKind } from '$lib/railway/types';
 	import { TILE, placeIntro } from './constants';
 
 	let { x, y, kind }: { x: number; y: number; kind: DecorationKind } = $props();
+
+	// Grass/stone neighbour terrain bleeding into this water tile per edge. Only
+	// applies on a true shoreline edge (neighbour is land, not more water) —
+	// otherwise a grass field sitting *under* the water would paint seams between
+	// adjacent water tiles.
+	const isLand = (k?: DecorationKind): k is 'grass' | 'stone' => k === 'grass' || k === 'stone';
+	const bleed = $derived(
+		kind === 'water'
+			? (
+					[
+						['N', 0, -1],
+						['E', 1, 0],
+						['S', 0, 1],
+						['W', -1, 0]
+					] as const
+				)
+					.filter(
+						([, dx, dy]) =>
+							getDecoration(x + dx, y + dy)?.kind !== 'water' &&
+							isLand(getGroundOver(x + dx, y + dy)?.kind)
+					)
+					.map(([edge, dx, dy]) => ({
+						edge,
+						color: TERRAIN_COLORS[getGroundOver(x + dx, y + dy)!.kind as 'grass' | 'stone']
+					}))
+			: []
+	);
 </script>
 
 <g transform="translate({x * TILE} {y * TILE})">
 	<g in:placeIntro|local style="transform-box: fill-box; transform-origin: center;">
 		{#if kind === 'water'}
-			{@const nN = getDecoration(x, y - 1)?.kind === 'water'}
-			{@const nE = getDecoration(x + 1, y)?.kind === 'water'}
-			{@const nS = getDecoration(x, y + 1)?.kind === 'water'}
-			{@const nW = getDecoration(x - 1, y)?.kind === 'water'}
-			<!-- Bleed the fill a hair past the cell edges so adjacent water tiles
-			     overlap and the grey grid pattern can't show through the seams. -->
-			<rect x={-0.6} y={-0.6} width={TILE + 1.2} height={TILE + 1.2} fill="#3a8fc7" />
+			{@const blob = terrainBlob(
+				x,
+				y,
+				{
+					n: getDecoration(x, y - 1)?.kind === 'water',
+					e: getDecoration(x + 1, y)?.kind === 'water',
+					s: getDecoration(x, y + 1)?.kind === 'water',
+					w: getDecoration(x - 1, y)?.kind === 'water'
+				},
+				TILE
+			)}
+			<path d={blob.fill} fill={TERRAIN_COLORS.water} />
+			<!-- Adjacent grass/stone encroaches a short, wavy-bordered band into the water. -->
+			{#each bleed as b (b.edge)}
+				<path d={terrainEncroachBand(x, y, b.edge, TILE)} fill={b.color} fill-opacity="0.85" />
+			{/each}
 			{#each waveGlints(x, y) as g, i (i)}
 				<line
 					x1={(g.cx - g.len * 0.5) * TILE}
@@ -30,50 +73,15 @@
 					style="animation-delay: -{((x * 0.73 + y * 0.41 + i * 0.6) % 2.4).toFixed(2)}s"
 				/>
 			{/each}
-			{#if !nN}
-				<line
-					x1={0}
-					y1={2}
-					x2={TILE}
-					y2={2}
-					stroke="#d9eef9"
-					stroke-opacity="0.9"
-					stroke-width={2.5}
-				/>
-			{/if}
-			{#if !nE}
-				<line
-					x1={TILE - 2}
-					y1={0}
-					x2={TILE - 2}
-					y2={TILE}
-					stroke="#d9eef9"
-					stroke-opacity="0.9"
-					stroke-width={2.5}
-				/>
-			{/if}
-			{#if !nS}
-				<line
-					x1={0}
-					y1={TILE - 2}
-					x2={TILE}
-					y2={TILE - 2}
-					stroke="#d9eef9"
-					stroke-opacity="0.9"
-					stroke-width={2.5}
-				/>
-			{/if}
-			{#if !nW}
-				<line
-					x1={2}
-					y1={0}
-					x2={2}
-					y2={TILE}
-					stroke="#d9eef9"
-					stroke-opacity="0.9"
-					stroke-width={2.5}
-				/>
-			{/if}
+			<!-- Shoreline highlight following the organic outline (exposed edges only). -->
+			<path
+				d={blob.shore}
+				fill="none"
+				stroke="#d9eef9"
+				stroke-opacity="0.9"
+				stroke-width={2.5}
+				stroke-linecap="round"
+			/>
 		{:else if kind === 'tree'}
 			{#each treeSpots(x, y) as t, i (i)}
 				{@const tx = t.cx * TILE}

@@ -31,7 +31,7 @@ export const MAX_THROTTLE = 8;
 // owned by the reverser's neutral position. DEFAULT_THROTTLE is the notch a
 // freshly placed loco starts on so it moves as soon as the reverser engages.
 export const THROTTLE_LEVELS = [1, 3, 5] as const;
-export const DEFAULT_THROTTLE = 3;
+export const DEFAULT_THROTTLE = 1;
 export const WAGON_LENGTH = 0.6;
 // People stop at the centre of the station tile; at this distance the loco
 // begins decelerating to arrive at zero speed.
@@ -152,6 +152,8 @@ export type SavedLocoState = {
 	dir: 1 | -1;
 	color: string;
 	wagons: number;
+	reverser?: Reverser;
+	throttle?: number;
 	autoReverse?: boolean;
 	switchLine?: boolean;
 };
@@ -176,8 +178,8 @@ export function replaceLocos(saved: SavedLocoState[]) {
 			t: s.t,
 			dir: s.dir,
 			stopped: false,
-			reverser: 0,
-			throttle: DEFAULT_THROTTLE,
+			reverser: s.reverser ?? 0,
+			throttle: s.throttle ?? DEFAULT_THROTTLE,
 			speed: 0,
 			routingCursor: 0,
 			wagons: [],
@@ -786,6 +788,7 @@ export function setReverser(id: number, r: Reverser) {
 		if (loco.stopped) loco.stopped = false;
 		for (const w of loco.wagons) if (w.stopped) w.stopped = false;
 	}
+	markDirty();
 	startLoopIfNeeded();
 }
 
@@ -810,11 +813,13 @@ export function setThrottle(id: number, t: number) {
 	const loco = findLoco(id);
 	if (!loco) return;
 	const clamped = Math.max(0, Math.min(MAX_THROTTLE, t));
+	if (clamped === loco.throttle) return;
 	loco.throttle = clamped;
 	if (clamped > 0 && loco.reverser !== 0) {
 		if (loco.stopped) loco.stopped = false;
 		for (const w of loco.wagons) if (w.stopped) w.stopped = false;
 	}
+	markDirty();
 	startLoopIfNeeded();
 }
 

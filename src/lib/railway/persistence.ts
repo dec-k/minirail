@@ -8,7 +8,7 @@ import {
 	setDecoration,
 	placementFx
 } from './grid.svelte';
-import { sim, replaceLocos, clearAllLocos, type SavedLocoState } from './sim.svelte';
+import { sim, replaceLocos, clearAllLocos, MAX_THROTTLE, type SavedLocoState } from './sim.svelte';
 import {
 	DECORATION_KINDS,
 	isSwitch,
@@ -19,10 +19,11 @@ import {
 } from './types';
 import { setLoaded, markClean, clearLoaded } from './doc.svelte';
 
-export const SCHEMA_VERSION = 3 as const;
+export const SCHEMA_VERSION = 4 as const;
 // Older save versions we can still read. Each one needs an explicit upgrade
-// path in `parseLayout`.
-const SUPPORTED_VERSIONS = new Set([1, 2, 3]);
+// path in `parseLayout`. v4 added per-loco reverser + throttle; earlier saves
+// omit them and load with the neutral / default-throttle fallbacks.
+const SUPPORTED_VERSIONS = new Set([1, 2, 3, 4]);
 export const STORAGE_PREFIX = 'minirail:save:';
 
 export type SavedCell = {
@@ -81,7 +82,9 @@ export function serializeLayout(name: string): SavedLayout {
 			t: l.t,
 			dir: l.dir,
 			color: l.color,
-			wagons: l.wagons.length
+			wagons: l.wagons.length,
+			reverser: l.reverser,
+			throttle: l.throttle
 		};
 		if (l.autoReverse) out.autoReverse = true;
 		if (l.switchLine) out.switchLine = true;
@@ -227,6 +230,14 @@ export function parseLayout(json: string): SavedLayout {
 			color: ll.color,
 			wagons: Math.max(0, Math.floor(ll.wagons))
 		};
+		// reverser/throttle were added in schema v4; older saves omit them and
+		// replaceLocos falls back to neutral / default throttle.
+		if (ll.reverser === -1 || ll.reverser === 0 || ll.reverser === 1) {
+			out.reverser = ll.reverser;
+		}
+		if (typeof ll.throttle === 'number' && Number.isFinite(ll.throttle)) {
+			out.throttle = Math.max(0, Math.min(MAX_THROTTLE, ll.throttle));
+		}
 		if (ll.autoReverse === true) out.autoReverse = true;
 		if (ll.switchLine === true) out.switchLine = true;
 		return out;

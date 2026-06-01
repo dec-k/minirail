@@ -12,7 +12,6 @@
 	} from '$lib/railway/sim.svelte';
 	import type { Reverser } from '$lib/railway/types';
 	import { Button } from '$lib/components/ui/button';
-	import { Card } from '$lib/components/ui/card';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import {
 		Minus,
@@ -24,11 +23,11 @@
 		Repeat,
 		Shuffle,
 		ChevronDown,
-		Train,
 		Container
 	} from 'lucide-svelte';
 	import { slide } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
+	import { untrack } from 'svelte';
 
 	type Icon = typeof Minus;
 
@@ -38,8 +37,7 @@
 		{ id: 1, label: 'Forward', icon: ChevronsRight }
 	];
 
-	// Three throttle notches rendered as > / >> / >>>. Highest-first so that the
-	// quickest train sits at the top of the visual ramp; the loco snaps to the
+	// Three throttle notches rendered as > / >> / >>>. The loco snaps to the
 	// nearest notch when its stored throttle doesn't land exactly on one.
 	const throttleOptions = THROTTLE_LEVELS.map((value, i) => ({
 		value,
@@ -53,186 +51,211 @@
 		).value;
 	}
 
-	let collapsed = $state(false);
+	// One popup is open at a time, keyed by loco id (null = strip only).
+	let openId = $state<number | null>(null);
 	let prevCount = 0;
 
-	// Auto-expand on the 0→1 transition so a freshly placed loco isn't hidden
-	// under the train-icon stub. User-driven collapse otherwise persists.
+	const openLoco = $derived(sim.locos.find((l) => l.id === openId) ?? null);
+
+	// Auto-open a freshly placed loco, and close the popup if the loco it was
+	// showing gets removed. Mutations are untracked so reading openId here doesn't
+	// feed back into this effect.
 	$effect(() => {
-		const n = sim.locos.length;
-		if (prevCount === 0 && n > 0) collapsed = false;
-		prevCount = n;
+		const ids = sim.locos.map((l) => l.id);
+		untrack(() => {
+			if (ids.length > prevCount && ids.length > 0) openId = ids[ids.length - 1];
+			prevCount = ids.length;
+			if (openId !== null && !ids.includes(openId)) openId = null;
+		});
 	});
+
+	function toggle(id: number) {
+		openId = openId === id ? null : id;
+	}
+
+	// Loco colour is used as an accent + faint body wash via color-mix so text
+	// contrast stays safe across the whole palette and in both themes.
+	function popupStyle(color: string): string {
+		return `background-color: color-mix(in srgb, ${color} 9%, var(--card)); border-color: color-mix(in srgb, ${color} 45%, var(--border));`;
+	}
+	function headerStyle(color: string): string {
+		return `background-color: color-mix(in srgb, ${color} 18%, var(--card)); border-color: color-mix(in srgb, ${color} 28%, var(--border));`;
+	}
+	function chipStyle(color: string, active: boolean): string {
+		const tint = active ? 24 : 10;
+		const border = active ? color : `color-mix(in srgb, ${color} 35%, var(--border))`;
+		// Active chip gets a loco-coloured ring (offset against the page bg) rather
+		// than the theme ring, so the highlight matches the train it controls.
+		const ring = active
+			? ` box-shadow: 0 0 0 1.5px var(--background), 0 0 0 3.5px ${color};`
+			: '';
+		return `background-color: color-mix(in srgb, ${color} ${tint}%, var(--card)); border-color: ${border};${ring}`;
+	}
 </script>
 
 {#if sim.locos.length > 0}
-	<!--
-		Grid stacking pins both collapsed/expanded branches to the same bottom-
-		center anchor so the parent's `-translate-x-1/2 left-1/2` centering does
-		not jump when one branch's content width differs from the other's
-		during the transition overlap.
-	-->
-	<div class="grid items-end justify-items-center">
-	{#if collapsed}
-		<div
-			class="col-start-1 row-start-1"
-			in:slide={{ duration: 180, easing: cubicOut, axis: 'y' }}
-			out:slide={{ duration: 140, easing: cubicOut, axis: 'y' }}
-		>
-		<Button
-			variant="default"
-			size="icon"
-			class="relative size-12 rounded-full shadow-md"
-			onclick={() => (collapsed = false)}
-			title="Show loco controls"
-			aria-label="Show loco controls"
-		>
-			<Train class="size-5" />
-			{#if sim.locos.length > 1}
-				<span
-					class="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-background px-1 text-xs font-semibold text-foreground tabular-nums ring-1 ring-border"
+	<div class="flex flex-col items-center gap-2">
+		<!-- The open loco's controls, tinted by its colour. Stays mounted while
+		     switching between chips so the content swaps without re-animating. -->
+		{#if openLoco}
+			<div
+				class="w-[min(360px,92vw)] overflow-hidden rounded-xl border shadow-lg"
+				style={popupStyle(openLoco.color)}
+				in:slide={{ duration: 200, easing: cubicOut, axis: 'y' }}
+				out:slide={{ duration: 150, easing: cubicOut, axis: 'y' }}
+			>
+				<!-- Header: identity + collapse + delete. -->
+				<div
+					class="flex items-center gap-2 border-b px-3 py-2"
+					style={headerStyle(openLoco.color)}
 				>
-					{sim.locos.length}
-				</span>
-			{/if}
-		</Button>
-		</div>
-	{:else}
-		<div
-			class="col-start-1 row-start-1"
-			in:slide={{ duration: 220, easing: cubicOut, axis: 'y' }}
-			out:slide={{ duration: 160, easing: cubicOut, axis: 'y' }}
-		>
-		<Card class="flex max-h-[60vh] w-[min(360px,92vw)] flex-col gap-2 overflow-y-auto p-2">
-			<div class="-mb-1 flex justify-end">
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					onclick={() => (collapsed = true)}
-					title="Collapse panel"
-					aria-label="Collapse loco panel"
-				>
-					<ChevronDown />
-				</Button>
-			</div>
-		{#each sim.locos as loco (loco.id)}
-			<div class="flex flex-col gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2">
-				<!-- Header: identity on the left, delete anchored to its own loco. -->
-				<div class="flex items-center gap-2">
 					<span
 						class="inline-block size-3.5 rounded-full ring-2 ring-background"
-						style="background-color: {loco.color}"
+						style="background-color: {openLoco.color}"
 						aria-hidden="true"
 					></span>
-					<span class="text-sm font-semibold tabular-nums">Loco {loco.id}</span>
+					<span class="text-sm font-semibold tabular-nums">Loco {openLoco.id}</span>
 					<Button
 						variant="ghost"
 						size="icon-sm"
-						class="-mr-1 ml-auto text-muted-foreground hover:text-destructive"
-						onclick={() => removeLoco(loco.id)}
-						aria-label="Remove Loco {loco.id}"
+						class="ml-auto"
+						onclick={() => (openId = null)}
+						title="Collapse controls"
+						aria-label="Collapse Loco {openLoco.id} controls"
+					>
+						<ChevronDown />
+					</Button>
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						class="-mr-1 text-muted-foreground hover:text-destructive"
+						onclick={() => removeLoco(openLoco.id)}
+						aria-label="Remove Loco {openLoco.id}"
 						title="Remove locomotive"
 					>
 						<X />
 					</Button>
 				</div>
 
-				<!--
-					Drive controls. The two segmented groups stretch to fill the row on
-					mobile (flex-1 + flex-1 items = big tap targets) and shrink to their
-					natural width on desktop (sm:flex-none).
-				-->
-				<div class="flex flex-wrap items-center gap-2 justify-between">
-					<ToggleGroup.Root
-						type="single"
-						value={String(loco.reverser)}
-						onValueChange={(v) => v && setReverser(loco.id, Number(v) as Reverser)}
-						aria-label="Direction"
-						class="sm:flex-none"
-					>
-						{#each reverserOptions as r (r.id)}
-							<ToggleGroup.Item
-								value={String(r.id)}
-								aria-label={r.label}
-								title={r.label}
-								class="h-9 flex-1 sm:flex-none"
-							>
-								<r.icon />
-							</ToggleGroup.Item>
-						{/each}
-					</ToggleGroup.Root>
-
-					<ToggleGroup.Root
-						type="single"
-						value={String(nearestThrottle(loco.throttle))}
-						onValueChange={(v) => v && setThrottle(loco.id, Number(v))}
-						aria-label="Speed"
-						class=" sm:flex-none"
-					>
-						{#each throttleOptions as o (o.value)}
-							<ToggleGroup.Item
-								value={String(o.value)}
-								aria-label={o.label}
-								title={o.label}
-								class="h-9 flex-1 sm:flex-none"
-							>
-								<span class="font-mono text-sm font-bold tracking-tighter">{o.glyph}</span>
-							</ToggleGroup.Item>
-						{/each}
-					</ToggleGroup.Root>
-				</div>
-
-				<!-- Secondary: wagon count on the left, behaviour toggles on the right. -->
-				<div class="flex items-center gap-2">
-					<div class="flex items-center gap-1.5">
-						<Container class="size-4 text-muted-foreground" aria-label="Wagons" />
-						<Button
-							variant="outline"
-							size="icon"
-							onclick={() => removeWagon(loco.id)}
-							disabled={loco.wagons.length === 0}
-							aria-label="Remove wagon from Loco {loco.id}"
+				<div class="flex flex-col gap-2 p-3">
+					<!-- Drive controls: direction + speed. Segments stretch full-width on
+					     mobile, shrink to natural width on desktop. -->
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<ToggleGroup.Root
+							type="single"
+							value={String(openLoco.reverser)}
+							onValueChange={(v) => v && setReverser(openLoco.id, Number(v) as Reverser)}
+							aria-label="Direction"
+							class="sm:flex-none"
 						>
-							<Minus />
-						</Button>
-						<span class="w-5 text-center text-sm tabular-nums">{loco.wagons.length}</span>
-						<Button
-							variant="outline"
-							size="icon"
-							onclick={() => addWagon(loco.id)}
-							aria-label="Add wagon to Loco {loco.id}"
+							{#each reverserOptions as r (r.id)}
+								<ToggleGroup.Item
+									value={String(r.id)}
+									aria-label={r.label}
+									title={r.label}
+									class="h-9 flex-1 sm:flex-none"
+								>
+									<r.icon />
+								</ToggleGroup.Item>
+							{/each}
+						</ToggleGroup.Root>
+
+						<ToggleGroup.Root
+							type="single"
+							value={String(nearestThrottle(openLoco.throttle))}
+							onValueChange={(v) => v && setThrottle(openLoco.id, Number(v))}
+							aria-label="Speed"
+							class="sm:flex-none"
 						>
-							<Plus />
-						</Button>
+							{#each throttleOptions as o (o.value)}
+								<ToggleGroup.Item
+									value={String(o.value)}
+									aria-label={o.label}
+									title={o.label}
+									class="h-9 flex-1 sm:flex-none"
+								>
+									<span class="font-mono text-sm font-bold tracking-tighter">{o.glyph}</span>
+								</ToggleGroup.Item>
+							{/each}
+						</ToggleGroup.Root>
 					</div>
 
-					<div class="ml-auto flex items-center gap-1">
-						<Button
-							variant={loco.autoReverse ? 'default' : 'outline'}
-							size="icon"
-							onclick={() => setAutoReverse(loco.id, !loco.autoReverse)}
-							aria-pressed={loco.autoReverse}
-							aria-label="Auto-reverse on dead end for Loco {loco.id}"
-							title="Auto-reverse on dead end"
-						>
-							<Repeat />
-						</Button>
-						<Button
-							variant={loco.switchLine ? 'default' : 'outline'}
-							size="icon"
-							onclick={() => setSwitchLine(loco.id, !loco.switchLine)}
-							aria-pressed={loco.switchLine}
-							aria-label="Toggle switches on pass for Loco {loco.id}"
-							title="Toggle switches when leaving"
-						>
-							<Shuffle />
-						</Button>
+					<!-- Secondary: wagon count + behaviour toggles. -->
+					<div class="flex items-center gap-2">
+						<div class="flex items-center gap-1.5">
+							<Container class="size-4 text-muted-foreground" aria-label="Wagons" />
+							<Button
+								variant="outline"
+								size="icon"
+								onclick={() => removeWagon(openLoco.id)}
+								disabled={openLoco.wagons.length === 0}
+								aria-label="Remove wagon from Loco {openLoco.id}"
+							>
+								<Minus />
+							</Button>
+							<span class="w-5 text-center text-sm tabular-nums">{openLoco.wagons.length}</span>
+							<Button
+								variant="outline"
+								size="icon"
+								onclick={() => addWagon(openLoco.id)}
+								aria-label="Add wagon to Loco {openLoco.id}"
+							>
+								<Plus />
+							</Button>
+						</div>
+
+						<div class="ml-auto flex items-center gap-1">
+							<Button
+								variant={openLoco.autoReverse ? 'default' : 'outline'}
+								size="icon"
+								onclick={() => setAutoReverse(openLoco.id, !openLoco.autoReverse)}
+								aria-pressed={openLoco.autoReverse}
+								aria-label="Auto-reverse on dead end for Loco {openLoco.id}"
+								title="Auto-reverse on dead end"
+							>
+								<Repeat />
+							</Button>
+							<Button
+								variant={openLoco.switchLine ? 'default' : 'outline'}
+								size="icon"
+								onclick={() => setSwitchLine(openLoco.id, !openLoco.switchLine)}
+								aria-pressed={openLoco.switchLine}
+								aria-label="Toggle switches on pass for Loco {openLoco.id}"
+								title="Toggle switches when leaving"
+							>
+								<Shuffle />
+							</Button>
+						</div>
 					</div>
 				</div>
 			</div>
-		{/each}
-		</Card>
+		{/if}
+
+		<!-- Colour-coded chip strip; one chip per loco. Scrolls horizontally so a
+		     long roster never wraps over the board. -->
+		<div
+			class="flex max-w-[92vw] items-center gap-1.5 overflow-x-auto rounded-full border border-border/70 bg-card/95 p-1.5 shadow-md backdrop-blur"
+		>
+			{#each sim.locos as loco (loco.id)}
+				{@const active = loco.id === openId}
+				<button
+					type="button"
+					class="flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm font-semibold tabular-nums transition {active
+						? ''
+						: 'hover:brightness-95'}"
+					style={chipStyle(loco.color, active)}
+					onclick={() => toggle(loco.id)}
+					aria-pressed={active}
+					title="Loco {loco.id}"
+				>
+					<span
+						class="size-2.5 rounded-full ring-1 ring-background"
+						style="background-color: {loco.color}"
+						aria-hidden="true"
+					></span>
+					{loco.id}
+				</button>
+			{/each}
 		</div>
-	{/if}
 	</div>
 {/if}

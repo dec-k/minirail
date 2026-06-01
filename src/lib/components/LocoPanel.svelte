@@ -8,13 +8,12 @@
 		removeLoco,
 		addWagon,
 		removeWagon,
-		MAX_THROTTLE
+		THROTTLE_LEVELS
 	} from '$lib/railway/sim.svelte';
 	import type { Reverser } from '$lib/railway/types';
 	import { Button } from '$lib/components/ui/button';
 	import { Card } from '$lib/components/ui/card';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
-	import { Slider } from '$lib/components/ui/slider';
 	import {
 		Minus,
 		Plus,
@@ -25,7 +24,8 @@
 		Repeat,
 		Shuffle,
 		ChevronDown,
-		Train
+		Train,
+		Container
 	} from 'lucide-svelte';
 	import { slide } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
@@ -37,6 +37,21 @@
 		{ id: 0, label: 'Neutral', icon: Square },
 		{ id: 1, label: 'Forward', icon: ChevronsRight }
 	];
+
+	// Three throttle notches rendered as > / >> / >>>. Highest-first so that the
+	// quickest train sits at the top of the visual ramp; the loco snaps to the
+	// nearest notch when its stored throttle doesn't land exactly on one.
+	const throttleOptions = THROTTLE_LEVELS.map((value, i) => ({
+		value,
+		label: `Speed ${i + 1}`,
+		glyph: '>'.repeat(i + 1)
+	}));
+
+	function nearestThrottle(t: number): number {
+		return throttleOptions.reduce((best, o) =>
+			Math.abs(o.value - t) < Math.abs(best.value - t) ? o : best
+		).value;
+	}
 
 	let collapsed = $state(false);
 	let prevCount = 0;
@@ -126,21 +141,18 @@
 					{/each}
 				</ToggleGroup.Root>
 
-				<div class="flex min-w-44 items-center gap-2">
-					<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-						Throttle
-					</span>
-					<Slider
-						type="single"
-						value={loco.throttle}
-						onValueChange={(v) => setThrottle(loco.id, v)}
-						min={0}
-						max={MAX_THROTTLE}
-						step={1}
-						class="w-28"
-					/>
-					<span class="w-5 text-right text-sm tabular-nums">{loco.throttle}</span>
-				</div>
+				<ToggleGroup.Root
+					type="single"
+					value={String(nearestThrottle(loco.throttle))}
+					onValueChange={(v) => v && setThrottle(loco.id, Number(v))}
+					aria-label="Throttle"
+				>
+					{#each throttleOptions as o (o.value)}
+						<ToggleGroup.Item value={String(o.value)} aria-label={o.label} title={o.label}>
+							<span class="font-mono text-sm font-bold tracking-tighter">{o.glyph}</span>
+						</ToggleGroup.Item>
+					{/each}
+				</ToggleGroup.Root>
 
 				<div class="flex items-center gap-1">
 					<Button
@@ -166,9 +178,7 @@
 				</div>
 
 				<div class="flex items-center gap-1.5">
-					<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-						Wagons
-					</span>
+					<Container class="size-4 text-muted-foreground" aria-label="Wagons" />
 					<Button
 						variant="outline"
 						size="icon-sm"

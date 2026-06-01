@@ -26,6 +26,12 @@ export const sim = $state({
 });
 
 export const MAX_THROTTLE = 8;
+// The three throttle notches exposed in the UI (slow / medium / fast). The
+// loco panel renders these as >, >>, >>> — there is no zero notch; stopping is
+// owned by the reverser's neutral position. DEFAULT_THROTTLE is the notch a
+// freshly placed loco starts on so it moves as soon as the reverser engages.
+export const THROTTLE_LEVELS = [1, 3, 5] as const;
+export const DEFAULT_THROTTLE = 3;
 export const WAGON_LENGTH = 0.6;
 // People stop at the centre of the station tile; at this distance the loco
 // begins decelerating to arrive at zero speed.
@@ -103,7 +109,7 @@ export function placeLoco(x: number, y: number) {
 		dir: 1,
 		stopped: false,
 		reverser: 0,
-		throttle: 0,
+		throttle: DEFAULT_THROTTLE,
 		speed: 0,
 		routingCursor: 0,
 		wagons: [],
@@ -171,7 +177,7 @@ export function replaceLocos(saved: SavedLocoState[]) {
 			dir: s.dir,
 			stopped: false,
 			reverser: 0,
-			throttle: 0,
+			throttle: DEFAULT_THROTTLE,
 			speed: 0,
 			routingCursor: 0,
 			wagons: [],

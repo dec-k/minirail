@@ -19,7 +19,7 @@
 		ChevronsLeft,
 		ChevronsRight,
 		Square,
-		X,
+		Trash2,
 		Repeat,
 		Shuffle,
 		ChevronDown,
@@ -73,6 +73,48 @@
 		openId = openId === id ? null : id;
 	}
 
+	// Two-step delete: the header trash icon arms a red "Delete?" confirm rather
+	// than removing on the first click, so a stray tap where a close button would
+	// normally sit can't destroy a loco. The armed state auto-disarms after a few
+	// seconds and is cleared whenever the open popup changes.
+	let confirmDelete = $state(false);
+	let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function clearConfirm() {
+		confirmDelete = false;
+		if (confirmTimer) {
+			clearTimeout(confirmTimer);
+			confirmTimer = null;
+		}
+	}
+
+	function armDelete() {
+		confirmDelete = true;
+		if (confirmTimer) clearTimeout(confirmTimer);
+		confirmTimer = setTimeout(() => {
+			confirmDelete = false;
+			confirmTimer = null;
+		}, 3000);
+	}
+
+	function confirmRemove(id: number) {
+		clearConfirm();
+		removeLoco(id);
+	}
+
+	// Reset the armed state when the open popup switches (or closes) so the confirm
+	// never carries over to a different loco.
+	let lastOpen: number | null = null;
+	$effect(() => {
+		const cur = openId;
+		untrack(() => {
+			if (cur !== lastOpen) {
+				lastOpen = cur;
+				clearConfirm();
+			}
+		});
+	});
+
 	// Loco colour is used as an accent + faint body wash via color-mix so text
 	// contrast stays safe across the whole palette and in both themes.
 	function popupStyle(color: string): string {
@@ -125,16 +167,29 @@
 					>
 						<ChevronDown />
 					</Button>
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						class="-mr-1 text-muted-foreground hover:text-destructive"
-						onclick={() => removeLoco(openLoco.id)}
-						aria-label="Remove Loco {openLoco.id}"
-						title="Remove locomotive"
-					>
-						<X />
-					</Button>
+					{#if confirmDelete}
+						<Button
+							variant="destructive"
+							size="sm"
+							class="-mr-1 h-7 px-2"
+							onclick={() => confirmRemove(openLoco.id)}
+							aria-label="Confirm remove Loco {openLoco.id}"
+							title="Tap again to remove this locomotive"
+						>
+							Delete?
+						</Button>
+					{:else}
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							class="-mr-1 text-muted-foreground hover:text-destructive"
+							onclick={armDelete}
+							aria-label="Remove Loco {openLoco.id}"
+							title="Remove locomotive"
+						>
+							<Trash2 />
+						</Button>
+					{/if}
 				</div>
 
 				<div class="flex flex-col gap-2 p-3">

@@ -103,7 +103,7 @@
 			in:slide={{ duration: 220, easing: cubicOut, axis: 'y' }}
 			out:slide={{ duration: 160, easing: cubicOut, axis: 'y' }}
 		>
-		<Card class="flex max-h-[40vh] flex-col gap-2 overflow-y-auto p-2">
+		<Card class="flex max-h-[60vh] w-[min(360px,92vw)] flex-col gap-2 overflow-y-auto p-2">
 			<div class="-mb-1 flex justify-end">
 				<Button
 					variant="ghost"
@@ -116,9 +116,8 @@
 				</Button>
 			</div>
 		{#each sim.locos as loco (loco.id)}
-			<div
-				class="flex flex-wrap items-center gap-3 rounded-lg border border-border/70 bg-muted/40 px-3 py-2"
-			>
+			<div class="flex flex-col gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2">
+				<!-- Header: identity on the left, delete anchored to its own loco. -->
 				<div class="flex items-center gap-2">
 					<span
 						class="inline-block size-3.5 rounded-full ring-2 ring-background"
@@ -126,89 +125,110 @@
 						aria-hidden="true"
 					></span>
 					<span class="text-sm font-semibold tabular-nums">Loco {loco.id}</span>
-				</div>
-
-				<ToggleGroup.Root
-					type="single"
-					value={String(loco.reverser)}
-					onValueChange={(v) => v && setReverser(loco.id, Number(v) as Reverser)}
-					aria-label="Reverser"
-				>
-					{#each reverserOptions as r (r.id)}
-						<ToggleGroup.Item value={String(r.id)} aria-label={r.label} title={r.label}>
-							<r.icon />
-						</ToggleGroup.Item>
-					{/each}
-				</ToggleGroup.Root>
-
-				<ToggleGroup.Root
-					type="single"
-					value={String(nearestThrottle(loco.throttle))}
-					onValueChange={(v) => v && setThrottle(loco.id, Number(v))}
-					aria-label="Throttle"
-				>
-					{#each throttleOptions as o (o.value)}
-						<ToggleGroup.Item value={String(o.value)} aria-label={o.label} title={o.label}>
-							<span class="font-mono text-sm font-bold tracking-tighter">{o.glyph}</span>
-						</ToggleGroup.Item>
-					{/each}
-				</ToggleGroup.Root>
-
-				<div class="flex items-center gap-1">
 					<Button
-						variant={loco.autoReverse ? 'default' : 'outline'}
+						variant="ghost"
 						size="icon-sm"
-						onclick={() => setAutoReverse(loco.id, !loco.autoReverse)}
-						aria-pressed={loco.autoReverse}
-						aria-label="Auto-reverse on dead end for Loco {loco.id}"
-						title="Auto-reverse on dead end"
+						class="-mr-1 ml-auto text-muted-foreground hover:text-destructive"
+						onclick={() => removeLoco(loco.id)}
+						aria-label="Remove Loco {loco.id}"
+						title="Remove locomotive"
 					>
-						<Repeat />
-					</Button>
-					<Button
-						variant={loco.switchLine ? 'default' : 'outline'}
-						size="icon-sm"
-						onclick={() => setSwitchLine(loco.id, !loco.switchLine)}
-						aria-pressed={loco.switchLine}
-						aria-label="Toggle switches on pass for Loco {loco.id}"
-						title="Toggle switches when leaving"
-					>
-						<Shuffle />
+						<X />
 					</Button>
 				</div>
 
-				<div class="flex items-center gap-1.5">
-					<Container class="size-4 text-muted-foreground" aria-label="Wagons" />
-					<Button
-						variant="outline"
-						size="icon-sm"
-						onclick={() => removeWagon(loco.id)}
-						disabled={loco.wagons.length === 0}
-						aria-label="Remove wagon from Loco {loco.id}"
+				<!--
+					Drive controls. The two segmented groups stretch to fill the row on
+					mobile (flex-1 + flex-1 items = big tap targets) and shrink to their
+					natural width on desktop (sm:flex-none).
+				-->
+				<div class="flex flex-wrap items-center gap-2 justify-between">
+					<ToggleGroup.Root
+						type="single"
+						value={String(loco.reverser)}
+						onValueChange={(v) => v && setReverser(loco.id, Number(v) as Reverser)}
+						aria-label="Direction"
+						class="sm:flex-none"
 					>
-						<Minus />
-					</Button>
-					<span class="w-5 text-center text-sm tabular-nums">{loco.wagons.length}</span>
-					<Button
-						variant="outline"
-						size="icon-sm"
-						onclick={() => addWagon(loco.id)}
-						aria-label="Add wagon to Loco {loco.id}"
+						{#each reverserOptions as r (r.id)}
+							<ToggleGroup.Item
+								value={String(r.id)}
+								aria-label={r.label}
+								title={r.label}
+								class="h-9 flex-1 sm:flex-none"
+							>
+								<r.icon />
+							</ToggleGroup.Item>
+						{/each}
+					</ToggleGroup.Root>
+
+					<ToggleGroup.Root
+						type="single"
+						value={String(nearestThrottle(loco.throttle))}
+						onValueChange={(v) => v && setThrottle(loco.id, Number(v))}
+						aria-label="Speed"
+						class=" sm:flex-none"
 					>
-						<Plus />
-					</Button>
+						{#each throttleOptions as o (o.value)}
+							<ToggleGroup.Item
+								value={String(o.value)}
+								aria-label={o.label}
+								title={o.label}
+								class="h-9 flex-1 sm:flex-none"
+							>
+								<span class="font-mono text-sm font-bold tracking-tighter">{o.glyph}</span>
+							</ToggleGroup.Item>
+						{/each}
+					</ToggleGroup.Root>
 				</div>
 
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					class="ml-auto text-muted-foreground hover:text-destructive"
-					onclick={() => removeLoco(loco.id)}
-					aria-label="Remove Loco {loco.id}"
-					title="Remove locomotive"
-				>
-					<X />
-				</Button>
+				<!-- Secondary: wagon count on the left, behaviour toggles on the right. -->
+				<div class="flex items-center gap-2">
+					<div class="flex items-center gap-1.5">
+						<Container class="size-4 text-muted-foreground" aria-label="Wagons" />
+						<Button
+							variant="outline"
+							size="icon"
+							onclick={() => removeWagon(loco.id)}
+							disabled={loco.wagons.length === 0}
+							aria-label="Remove wagon from Loco {loco.id}"
+						>
+							<Minus />
+						</Button>
+						<span class="w-5 text-center text-sm tabular-nums">{loco.wagons.length}</span>
+						<Button
+							variant="outline"
+							size="icon"
+							onclick={() => addWagon(loco.id)}
+							aria-label="Add wagon to Loco {loco.id}"
+						>
+							<Plus />
+						</Button>
+					</div>
+
+					<div class="ml-auto flex items-center gap-1">
+						<Button
+							variant={loco.autoReverse ? 'default' : 'outline'}
+							size="icon"
+							onclick={() => setAutoReverse(loco.id, !loco.autoReverse)}
+							aria-pressed={loco.autoReverse}
+							aria-label="Auto-reverse on dead end for Loco {loco.id}"
+							title="Auto-reverse on dead end"
+						>
+							<Repeat />
+						</Button>
+						<Button
+							variant={loco.switchLine ? 'default' : 'outline'}
+							size="icon"
+							onclick={() => setSwitchLine(loco.id, !loco.switchLine)}
+							aria-pressed={loco.switchLine}
+							aria-label="Toggle switches on pass for Loco {loco.id}"
+							title="Toggle switches when leaving"
+						>
+							<Shuffle />
+						</Button>
+					</div>
+				</div>
 			</div>
 		{/each}
 		</Card>

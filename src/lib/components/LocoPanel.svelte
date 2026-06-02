@@ -109,8 +109,12 @@
 		removeLoco(id);
 	}
 
-	// Reset the armed state when the open popup switches (or closes) so the confirm
-	// never carries over to a different loco.
+	// The colour palette is hidden until the user clicks the colour dot beside the
+	// name, keeping the popup compact. Picking a colour collapses it again.
+	let paletteOpen = $state(false);
+
+	// Reset the armed delete + palette state when the open popup switches (or
+	// closes) so neither carries over to a different loco.
 	let lastOpen: number | null = null;
 	$effect(() => {
 		const cur = openId;
@@ -118,6 +122,7 @@
 			if (cur !== lastOpen) {
 				lastOpen = cur;
 				clearConfirm();
+				paletteOpen = false;
 			}
 		});
 	});
@@ -153,11 +158,15 @@
 			>
 				<!-- Header: identity + collapse + delete. -->
 				<div class="flex items-center gap-2 border-b px-3 py-2" style={headerStyle(openLoco.color)}>
-					<span
-						class="inline-block size-3.5 shrink-0 rounded-full ring-2 ring-background"
+					<button
+						type="button"
+						onclick={() => (paletteOpen = !paletteOpen)}
+						class="size-5 shrink-0 rounded-full ring-2 ring-background transition hover:scale-110 active:scale-95"
 						style="background-color: {openLoco.color}"
-						aria-hidden="true"
-					></span>
+						aria-label="Change colour for Loco {openLoco.id}"
+						aria-expanded={paletteOpen}
+						title="Change colour"
+					></button>
 					<input
 						type="text"
 						value={openLoco.name}
@@ -203,25 +212,36 @@
 				</div>
 
 				<div class="flex flex-col gap-2 p-3">
-					<!-- Colour palette: pick from the shared loco palette. The selected
-					     swatch gets a ring offset against the body so it reads as active. -->
-					<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Loco colour">
-						{#each LOCO_COLORS as c (c)}
-							{@const selected = openLoco.color === c}
-							<button
-								type="button"
-								class="size-6 rounded-full border border-black/10 transition active:scale-90 {selected
-									? ''
-									: 'hover:scale-110'}"
-								style="background-color: {c};{selected
-									? ` box-shadow: 0 0 0 2px var(--card), 0 0 0 4px ${c};`
-									: ''}"
-								onclick={() => setLocoColor(openLoco.id, c)}
-								aria-label="Set colour {c}"
-								aria-pressed={selected}
-							></button>
-						{/each}
-					</div>
+					<!-- Colour palette: revealed by the header colour dot. Each swatch picks
+					     from the shared loco palette; the selected one gets a ring offset
+					     against the body so it reads as active. Picking collapses the row. -->
+					{#if paletteOpen}
+						<div
+							class="flex flex-wrap items-center gap-1.5"
+							role="group"
+							aria-label="Loco colour"
+							transition:slide={{ duration: 150, easing: cubicOut }}
+						>
+							{#each LOCO_COLORS as c (c)}
+								{@const selected = openLoco.color === c}
+								<button
+									type="button"
+									class="size-6 rounded-full border border-black/10 transition active:scale-90 {selected
+										? ''
+										: 'hover:scale-110'}"
+									style="background-color: {c};{selected
+										? ` box-shadow: 0 0 0 2px var(--card), 0 0 0 4px ${c};`
+										: ''}"
+									onclick={() => {
+										setLocoColor(openLoco.id, c);
+										paletteOpen = false;
+									}}
+									aria-label="Set colour {c}"
+									aria-pressed={selected}
+								></button>
+							{/each}
+						</div>
+					{/if}
 
 					<!-- Drive controls: direction + speed. Segments stretch full-width on
 					     mobile, shrink to natural width on desktop. -->

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { T } from '@threlte/core';
+	import { T, useThrelte } from '@threlte/core';
 	import { OrbitControls, interactivity, type IntersectionEvent } from '@threlte/extras';
 	import * as THREE from 'three';
 	import {
@@ -17,11 +17,10 @@
 	import { sample } from '$lib/railway/geometry';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { isSwitch, type DecorationKind, type PieceKind } from '$lib/railway/types';
-	import Track3D from './Track3D.svelte';
-	import Decoration3D from './Decoration3D.svelte';
-	import GroundOver3D from './GroundOver3D.svelte';
+	import Scenery3D from './Scenery3D.svelte';
 	import Station3D from './Station3D.svelte';
 	import Vehicle3D from './Vehicle3D.svelte';
+	import Postprocessing from './Postprocessing.svelte';
 	import { gridLinesGeometry } from './geometry3d';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' | 'pan';
@@ -57,27 +56,6 @@
 		sun.shadow.radius = 4;
 		sun.shadow.needsUpdate = true;
 	});
-
-	const cellEntries = $derived(
-		[...grid.cells.entries()].map(([k, piece]) => {
-			const [x, y] = k.split(',').map(Number);
-			return { x, y, piece };
-		})
-	);
-
-	const decorationEntries = $derived(
-		[...grid.decorations.entries()].map(([k, decoration]) => {
-			const [x, y] = k.split(',').map(Number);
-			return { x, y, decoration };
-		})
-	);
-
-	const groundOverEntries = $derived(
-		[...grid.groundOvers.entries()].map(([k, groundOver]) => {
-			const [x, y] = k.split(',').map(Number);
-			return { x, y, groundOver };
-		})
-	);
 
 	const stationEntries = $derived(
 		[...grid.stations.entries()].map(([k, station]) => {
@@ -129,6 +107,54 @@
 
 	const gridLines = $derived(gridLinesGeometry(w, h));
 
+	// Theme-aware sky + fog. Watches the <html> .dark class so the diorama
+	// backdrop tracks the app's light/dark mode. A vertical gradient reads as a
+	// soft sky; distance fog matched to the horizon colour melts the (enlarged)
+	// far ground into it for depth.
+	const { scene } = useThrelte();
+	let dark = $state(false);
+	$effect(() => {
+		const el = document.documentElement;
+		const sync = () => (dark = el.classList.contains('dark'));
+		sync();
+		const obs = new MutationObserver(sync);
+		obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+		return () => obs.disconnect();
+	});
+
+	const groundColor = $derived(dark ? '#39414e' : '#e9e4d8');
+	const groundSize = $derived(Math.max(w, h) * 8);
+
+	function gradientTexture(top: string, bottom: string) {
+		const c = document.createElement('canvas');
+		c.width = 2;
+		c.height = 256;
+		const ctx = c.getContext('2d')!;
+		const grad = ctx.createLinearGradient(0, 0, 0, 256);
+		grad.addColorStop(0, top);
+		grad.addColorStop(1, bottom);
+		ctx.fillStyle = grad;
+		ctx.fillRect(0, 0, 2, 256);
+		const tex = new THREE.CanvasTexture(c);
+		tex.colorSpace = THREE.SRGBColorSpace;
+		return tex;
+	}
+
+	$effect(() => {
+		const sky = dark
+			? { top: '#0f1622', bottom: '#28323f' }
+			: { top: '#9fc4e8', bottom: '#e6eef4' };
+		const fogColor = dark ? '#28323f' : '#e6eef4';
+		const tex = gradientTexture(sky.top, sky.bottom);
+		scene.background = tex;
+		scene.fog = new THREE.Fog(fogColor, 55, 170);
+		return () => {
+			tex.dispose();
+			scene.background = null;
+			scene.fog = null;
+		};
+	});
+
 	// Mirrors Board.svelte's click handler. Raycasting replaces getScreenCTM, so
 	// this works at any camera angle.
 	function editAt(x: number, y: number, shift: boolean) {
@@ -173,15 +199,25 @@
 </script>
 
 <T.PerspectiveCamera makeDefault position={[0, 30, 36]} fov={45}>
+	<!-- Right-drag orbits, middle-drag pans, wheel zooms. Selecting the Pan tool
+		 also lets left-drag pan (editing is disabled for that tool anyway), matching
+		 the 2D board. Touch: one finger orbits, two fingers pan + pinch-zoom. -->
 	<OrbitControls
 		enableDamping
+		enablePan
 		dampingFactor={0.08}
 		minDistance={8}
 		maxDistance={70}
 		maxPolarAngle={Math.PI * 0.49}
-		mouseButtons={{ LEFT: undefined, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }}
+		mouseButtons={{
+			LEFT: tool === 'pan' ? THREE.MOUSE.PAN : undefined,
+			MIDDLE: THREE.MOUSE.PAN,
+			RIGHT: THREE.MOUSE.ROTATE
+		}}
 	/>
 </T.PerspectiveCamera>
+
+<Postprocessing />
 
 <!-- Sky/ground hemisphere is the main fill (cool sky above, warm bounce below),
 	 with just a touch of flat ambient to keep deep shadows from going black. The
@@ -198,33 +234,25 @@
 
 <!-- Board content, centred on the origin so OrbitControls orbits the middle. -->
 <T.Group position={[-w / 2, 0, -h / 2]}>
-	<!-- Ground plane: the only interactive mesh, so every click resolves to a
-		 cell via its world hit point regardless of what's drawn on top. -->
+	<!-- Ground plane: enlarged so its edges fade into the fog instead of showing a
+		 hard slab edge. Still the only interactive mesh, so every click resolves to
+		 a cell via its world hit point regardless of what's drawn on top. -->
 	<T.Mesh
 		rotation.x={-Math.PI / 2}
 		position={[w / 2, 0, h / 2]}
 		receiveShadow
 		onclick={onGroundClick}
 	>
-		<T.PlaneGeometry args={[w, h]} />
-		<T.MeshStandardMaterial color="#e9e4d8" roughness={1} />
+		<T.PlaneGeometry args={[groundSize, groundSize]} />
+		<T.MeshStandardMaterial color={groundColor} roughness={1} />
 	</T.Mesh>
 
 	<T.LineSegments geometry={gridLines}>
 		<T.LineBasicMaterial color="#cfcabb" transparent opacity={0.8} />
 	</T.LineSegments>
 
-	{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
-		<GroundOver3D {x} {y} kind={groundOver.kind} />
-	{/each}
-
-	{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
-		<Decoration3D {x} {y} kind={decoration.kind} />
-	{/each}
-
-	{#each cellEntries as { x, y, piece } (`${x},${y}`)}
-		<Track3D {x} {y} {piece} />
-	{/each}
+	<!-- All track + scenery, GPU-instanced (a handful of draw calls total). -->
+	<Scenery3D />
 
 	{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
 		<Station3D {x} {y} {station} />

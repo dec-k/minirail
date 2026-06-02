@@ -1,12 +1,15 @@
 <script lang="ts">
 	import Board from '$lib/components/Board.svelte';
+	import Board3D from '$lib/components/Board3D.svelte';
 	import ToolPalette from '$lib/components/ToolPalette.svelte';
 	import LocoPanel from '$lib/components/LocoPanel.svelte';
 	import MainMenu from '$lib/components/MainMenu.svelte';
 	import LandingScreen from '$lib/components/LandingScreen.svelte';
 	import { doc } from '$lib/railway/doc.svelte';
+	import { view, toggleTilt } from '$lib/railway/view.svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
+	import { Box, Square } from 'lucide-svelte';
 	import type { DecorationKind, PieceKind } from '$lib/railway/types';
 
 	let tool: PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' | 'pan' = $state('draw');
@@ -21,7 +24,11 @@
 		class="fixed inset-0 overflow-hidden bg-board-bg text-foreground"
 		in:fade={{ duration: 500, delay: 150, easing: cubicOut }}
 	>
-		<Board {tool} {decorationKind} />
+		{#if view.tilted}
+			<Board3D {tool} {decorationKind} />
+		{:else}
+			<Board {tool} {decorationKind} />
+		{/if}
 
 		<div
 			class="pointer-events-none absolute top-4 left-4"
@@ -69,6 +76,27 @@
 			in:fly={{ y: 16, duration: 500, delay: 500, easing: cubicOut }}
 		>
 			<LocoPanel />
+		</div>
+
+		<div
+			class="pointer-events-auto absolute right-4 bottom-4"
+			in:fly={{ y: 16, duration: 500, delay: 550, easing: cubicOut }}
+		>
+			<button
+				type="button"
+				onclick={toggleTilt}
+				aria-pressed={view.tilted}
+				title={view.tilted ? 'Flat 2D view' : '3D diorama view'}
+				class="flex size-11 items-center justify-center rounded-lg border bg-card text-card-foreground shadow-2xl ring-1 ring-black/5 transition-colors hover:bg-accent hover:text-accent-foreground dark:ring-white/10"
+				class:bg-primary={view.tilted}
+				class:text-primary-foreground={view.tilted}
+			>
+				{#if view.tilted}
+					<Square class="size-5" />
+				{:else}
+					<Box class="size-5" />
+				{/if}
+			</button>
 		</div>
 	</div>
 {/if}

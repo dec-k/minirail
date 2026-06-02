@@ -38,16 +38,24 @@
 			stroke="#7a6543"
 			stroke-width="1"
 		/>
-		<rect
-			x={TILE * 0.32}
-			y={TILE * 0.64}
-			width={TILE * 0.36}
-			height={TILE * 0.14}
-			fill="#8a6a48"
-			stroke="#3a2a1a"
-			stroke-width="1"
-		/>
-		<rect x={TILE * 0.28} y={TILE * 0.6} width={TILE * 0.44} height={TILE * 0.06} fill="#3a2a1a" />
+		<g class="standee" style="--pop: 1.3; --rise: 4px;">
+			<rect
+				x={TILE * 0.32}
+				y={TILE * 0.64}
+				width={TILE * 0.36}
+				height={TILE * 0.14}
+				fill="#8a6a48"
+				stroke="#3a2a1a"
+				stroke-width="1"
+			/>
+			<rect
+				x={TILE * 0.28}
+				y={TILE * 0.6}
+				width={TILE * 0.44}
+				height={TILE * 0.06}
+				fill="#3a2a1a"
+			/>
+		</g>
 		{#each Array.from({ length: headCount }), pi (pi)}
 			<circle
 				cx={TILE * (0.18 + pi * 0.16)}
@@ -69,16 +77,24 @@
 			stroke="#7a6543"
 			stroke-width="1"
 		/>
-		<rect
-			x={TILE * 0.64}
-			y={TILE * 0.45}
-			width={TILE * 0.14}
-			height={TILE * 0.36}
-			fill="#8a6a48"
-			stroke="#3a2a1a"
-			stroke-width="1"
-		/>
-		<rect x={TILE * 0.6} y={TILE * 0.41} width={TILE * 0.06} height={TILE * 0.44} fill="#3a2a1a" />
+		<g class="standee" style="--pop: 1.3; --rise: 4px;">
+			<rect
+				x={TILE * 0.64}
+				y={TILE * 0.45}
+				width={TILE * 0.14}
+				height={TILE * 0.36}
+				fill="#8a6a48"
+				stroke="#3a2a1a"
+				stroke-width="1"
+			/>
+			<rect
+				x={TILE * 0.6}
+				y={TILE * 0.41}
+				width={TILE * 0.06}
+				height={TILE * 0.44}
+				fill="#3a2a1a"
+			/>
+		</g>
 		{#each Array.from({ length: headCount }), pi (pi)}
 			<circle
 				cx={TILE * 0.85}
@@ -90,27 +106,29 @@
 			/>
 		{/each}
 	{/if}
-	<rect
-		x={TILE * 0.08}
-		y={TILE * 0.04}
-		width={TILE * 0.84}
-		height={TILE * 0.24}
-		rx={TILE * 0.06}
-		fill={hasPeople ? '#f59e0b' : '#94a3b8'}
-		fill-opacity="0.92"
-		stroke={hasPeople ? '#92400e' : '#475569'}
-		stroke-width="1.5"
-	/>
-	<text
-		x={TILE * 0.5}
-		y={TILE * 0.18}
-		text-anchor="middle"
-		dominant-baseline="middle"
-		font-size={TILE * 0.18}
-		font-weight="700"
-		fill="#ffffff"
-		style="paint-order: stroke; stroke: rgba(0,0,0,0.35); stroke-width: 2;"
-	>
-		{station.peopleWaiting}
-	</text>
+	<g class="standee" style="--pop: 1.35; --rise: 6px;">
+		<rect
+			x={TILE * 0.08}
+			y={TILE * 0.04}
+			width={TILE * 0.84}
+			height={TILE * 0.24}
+			rx={TILE * 0.06}
+			fill={hasPeople ? '#f59e0b' : '#94a3b8'}
+			fill-opacity="0.92"
+			stroke={hasPeople ? '#92400e' : '#475569'}
+			stroke-width="1.5"
+		/>
+		<text
+			x={TILE * 0.5}
+			y={TILE * 0.18}
+			text-anchor="middle"
+			dominant-baseline="middle"
+			font-size={TILE * 0.18}
+			font-weight="700"
+			fill="#ffffff"
+			style="paint-order: stroke; stroke: rgba(0,0,0,0.35); stroke-width: 2;"
+		>
+			{station.peopleWaiting}
+		</text>
+	</g>
 </g>

@@ -128,3 +128,18 @@
 		border-color: var(--color-border);
 	}
 }
+
+/* Pop-up "standee" scenery. Bodies of tall objects (trees, buildings, station
+ * shelters) carry this class while their ground shadow stays behind, flat. When
+ * the board leans into the tilted diorama view (.board-tilted, set in
+ * Board.svelte) each body rises and grows from its base, faking a cut-out piece
+ * standing up off the page. Anchoring at bottom-center keeps the contact point
+ * pinned to its shadow. Per-element `--pop` / `--rise` tune height by object. */
+.standee {
+	transform-box: fill-box;
+	transform-origin: bottom center;
+	transition: transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.board-tilted .standee {
+	transform: translateY(calc(var(--rise, 4px) * -1)) scaleY(var(--pop, 1.4));
+}

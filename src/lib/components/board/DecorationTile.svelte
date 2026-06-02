@@ -85,22 +85,24 @@
 					fill="#000"
 					fill-opacity="0.18"
 				/>
-				<rect
-					x={tx - TILE * 0.025}
-					y={ty + tr * 0.4}
-					width={TILE * 0.05}
-					height={tr * 0.55}
-					fill="#6b3a12"
-				/>
-				<circle cx={tx} cy={ty} r={tr} fill={t.tone > 0.5 ? '#3f6e2e' : '#467a35'} />
-				<circle cx={tx} cy={ty} r={tr * 0.94} fill={t.tone > 0.5 ? '#5b9d47' : '#67a652'} />
-				<circle
-					cx={tx - tr * 0.3}
-					cy={ty - tr * 0.3}
-					r={tr * 0.55}
-					fill={t.tone > 0.5 ? '#8fc56e' : '#a0d27e'}
-					fill-opacity="0.9"
-				/>
+				<g class="standee" style="--pop: 1.4; --rise: 5px;">
+					<rect
+						x={tx - TILE * 0.025}
+						y={ty + tr * 0.4}
+						width={TILE * 0.05}
+						height={tr * 0.55}
+						fill="#6b3a12"
+					/>
+					<circle cx={tx} cy={ty} r={tr} fill={t.tone > 0.5 ? '#3f6e2e' : '#467a35'} />
+					<circle cx={tx} cy={ty} r={tr * 0.94} fill={t.tone > 0.5 ? '#5b9d47' : '#67a652'} />
+					<circle
+						cx={tx - tr * 0.3}
+						cy={ty - tr * 0.3}
+						r={tr * 0.55}
+						fill={t.tone > 0.5 ? '#8fc56e' : '#a0d27e'}
+						fill-opacity="0.9"
+					/>
+				</g>
 			{/each}
 		{:else if kind === 'building'}
 			{#each buildingSpots(x, y) as h, i (i)}
@@ -115,8 +117,7 @@
 				{@const roofPeak = bodyTop - w * 0.45}
 				{@const overhang = w * 0.08}
 				{@const body = h.tone > 0.5 ? '#f0dfc2' : '#e0cfae'}
-				{@const roof =
-					h.roofTone < 0.34 ? '#a04d3a' : h.roofTone < 0.67 ? '#7a5535' : '#5a6072'}
+				{@const roof = h.roofTone < 0.34 ? '#a04d3a' : h.roofTone < 0.67 ? '#7a5535' : '#5a6072'}
 				<ellipse
 					{cx}
 					cy={bodyBot + w * 0.06}
@@ -125,29 +126,32 @@
 					fill="#000"
 					fill-opacity="0.18"
 				/>
-				<rect
-					x={bodyLeft}
-					y={bodyTop}
-					width={w}
-					height={bodyBot - bodyTop}
-					fill={body}
-					stroke="#3a2a1a"
-					stroke-width="1"
-				/>
-				<polygon
-					points="{bodyLeft - overhang},{bodyTop} {bodyRight + overhang},{bodyTop} {cx},{roofPeak}"
-					fill={roof}
-					stroke="#3a2a1a"
-					stroke-width="1"
-					stroke-linejoin="round"
-				/>
-				<rect
-					x={cx - w * 0.09}
-					y={bodyBot - ht * 0.42}
-					width={w * 0.18}
-					height={ht * 0.42}
-					fill="#3a2a1a"
-				/>
+				<g class="standee" style="--pop: 1.5; --rise: 7px;">
+					<rect
+						x={bodyLeft}
+						y={bodyTop}
+						width={w}
+						height={bodyBot - bodyTop}
+						fill={body}
+						stroke="#3a2a1a"
+						stroke-width="1"
+					/>
+					<polygon
+						points="{bodyLeft - overhang},{bodyTop} {bodyRight +
+							overhang},{bodyTop} {cx},{roofPeak}"
+						fill={roof}
+						stroke="#3a2a1a"
+						stroke-width="1"
+						stroke-linejoin="round"
+					/>
+					<rect
+						x={cx - w * 0.09}
+						y={bodyBot - ht * 0.42}
+						width={w * 0.18}
+						height={ht * 0.42}
+						fill="#3a2a1a"
+					/>
+				</g>
 			{/each}
 		{/if}
 	</g>

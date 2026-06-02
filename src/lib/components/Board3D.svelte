@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Canvas } from '@threlte/core';
+	import * as THREE from 'three';
 	import Scene from './board3d/Scene.svelte';
 	import type { DecorationKind, PieceKind } from '$lib/railway/types';
 
@@ -9,7 +10,9 @@
 </script>
 
 <div class="absolute inset-0 overflow-hidden bg-board-bg">
-	<Canvas>
+	<!-- Soft shadows + filmic tone mapping so the strong key light shapes form
+		 without clipping highlights to flat white. -->
+	<Canvas shadows={THREE.PCFSoftShadowMap} toneMapping={THREE.ACESFilmicToneMapping}>
 		<Scene {tool} {decorationKind} />
 	</Canvas>
 </div>

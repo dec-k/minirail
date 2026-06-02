@@ -12,12 +12,16 @@
 		toggleStationAt,
 		placeDecoration
 	} from '$lib/railway/grid.svelte';
-	import { placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
+	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
+	import { particles } from '$lib/railway/particles.svelte';
+	import { sample } from '$lib/railway/geometry';
+	import { pathsOf } from '$lib/railway/pieces';
 	import { isSwitch, type DecorationKind, type PieceKind } from '$lib/railway/types';
 	import Track3D from './Track3D.svelte';
 	import Decoration3D from './Decoration3D.svelte';
 	import GroundOver3D from './GroundOver3D.svelte';
 	import Station3D from './Station3D.svelte';
+	import Vehicle3D from './Vehicle3D.svelte';
 	import { gridLinesGeometry } from './geometry3d';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' | 'pan';
@@ -29,6 +33,30 @@
 
 	const w = $derived(grid.width);
 	const h = $derived(grid.height);
+
+	// The sun. Its shadow camera must be widened to cover the whole board AND have
+	// updateProjectionMatrix() called — three.js won't pick up changed ortho
+	// bounds otherwise, leaving the default ~±5 frustum (the reason no shadows
+	// showed across the board). normalBias kills acne on the box/cone faces;
+	// radius softens the edges (PCFSoft shadow map).
+	let sun: THREE.DirectionalLight | undefined = $state();
+	$effect(() => {
+		if (!sun) return;
+		const half = Math.max(w, h) / 2 + 4;
+		const cam = sun.shadow.camera;
+		cam.left = -half;
+		cam.right = half;
+		cam.top = half;
+		cam.bottom = -half;
+		cam.near = 1;
+		cam.far = 140;
+		cam.updateProjectionMatrix();
+		sun.shadow.mapSize.set(2048, 2048);
+		sun.shadow.bias = -0.0003;
+		sun.shadow.normalBias = 0.04;
+		sun.shadow.radius = 4;
+		sun.shadow.needsUpdate = true;
+	});
 
 	const cellEntries = $derived(
 		[...grid.cells.entries()].map(([k, piece]) => {
@@ -57,6 +85,47 @@
 			return { x, y, station };
 		})
 	);
+
+	// Vehicle poses, sampled from the same path geometry the SVG board uses but in
+	// grid units. rotation.y = -heading turns a body's +X axis onto the travel
+	// direction; reversing adds 180°.
+	function poseOf(v: { x: number; y: number; pathIdx: number; t: number; dir: 1 | -1 }) {
+		const piece = getPiece(v.x, v.y);
+		if (!piece) return null;
+		const path = pathsOf(piece)[v.pathIdx];
+		if (!path) return null;
+		const s = sample(path, v.t);
+		return { x: v.x + s.x, z: v.y + s.y, rotY: -s.heading + (v.dir === -1 ? Math.PI : 0) };
+	}
+
+	const vehiclePoses = $derived.by(() => {
+		const out: {
+			key: string;
+			kind: 'loco' | 'wagon';
+			color: string;
+			occupied: boolean;
+			x: number;
+			z: number;
+			rotY: number;
+		}[] = [];
+		for (const l of sim.locos) {
+			const lp = poseOf(l);
+			if (lp)
+				out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, occupied: false, ...lp });
+			for (let i = 0; i < l.wagons.length; i++) {
+				const wp = poseOf(l.wagons[i]);
+				if (wp)
+					out.push({
+						key: `wagon-${l.id}-${i}`,
+						kind: 'wagon',
+						color: l.color,
+						occupied: i < l.passengers.length,
+						...wp
+					});
+			}
+		}
+		return out;
+	});
 
 	const gridLines = $derived(gridLinesGeometry(w, h));
 
@@ -114,21 +183,17 @@
 	/>
 </T.PerspectiveCamera>
 
-<T.AmbientLight intensity={1.1} />
-<T.HemisphereLight intensity={0.5} groundColor="#b9b09c" />
+<!-- Sky/ground hemisphere is the main fill (cool sky above, warm bounce below),
+	 with just a touch of flat ambient to keep deep shadows from going black. The
+	 warm directional sun does the actual shaping and casts the shadows. -->
+<T.AmbientLight intensity={0.18} />
+<T.HemisphereLight intensity={0.85} color="#bcd4ff" groundColor="#8f8262" />
 <T.DirectionalLight
-	position={[18, 34, 12]}
-	intensity={2.2}
+	bind:ref={sun}
+	position={[24, 32, 16]}
+	intensity={2.7}
+	color="#fff1da"
 	castShadow
-	shadow.mapSize.width={2048}
-	shadow.mapSize.height={2048}
-	shadow.camera.near={1}
-	shadow.camera.far={120}
-	shadow.camera.left={-32}
-	shadow.camera.right={32}
-	shadow.camera.top={32}
-	shadow.camera.bottom={-32}
-	shadow.bias={-0.0004}
 />
 
 <!-- Board content, centred on the origin so OrbitControls orbits the middle. -->
@@ -163,5 +228,20 @@
 
 	{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
 		<Station3D {x} {y} {station} />
+	{/each}
+
+	{#each vehiclePoses as p (p.key)}
+		<Vehicle3D kind={p.kind} color={p.color} occupied={p.occupied} x={p.x} z={p.z} rotY={p.rotY} />
+	{/each}
+
+	<!-- Steam puffs: grid-coord particles owned by the sim loop. They rise in Y
+		 over their life and fade out, drawn unlit so they read as light vapour. -->
+	{#each particles.list as pt (pt.id)}
+		{@const t = Math.min(1, pt.life / pt.maxLife)}
+		{@const r = 0.1 + t * 0.22}
+		<T.Mesh position={[pt.x, 0.42 + t * 0.5, pt.y]} scale={r}>
+			<T.SphereGeometry args={[1, 8, 8]} />
+			<T.MeshBasicMaterial color="#ffffff" transparent opacity={(1 - t) * 0.5} depthWrite={false} />
+		</T.Mesh>
 	{/each}
 </T.Group>

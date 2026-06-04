@@ -24,6 +24,7 @@
 		tuftMat,
 		pebbleMat,
 		waterMat,
+		waterBedMat,
 		sleeperMat,
 		railMat,
 		getRailGeo,
@@ -155,8 +156,13 @@
 			}))
 		)
 	);
+	// Opaque bed near ground level + translucent surface just above the grass patches
+	// (0.014), so the pond no longer floats and shows a cream rim beneath its edge.
+	const waterBed = $derived<InstanceItem[]>(
+		waterTiles.map(({ x, y }) => ({ x: x + 0.5, y: 0.01, z: y + 0.5 }))
+	);
 	const water = $derived<InstanceItem[]>(
-		waterTiles.map(({ x, y }) => ({ x: x + 0.5, y: 0.04, z: y + 0.5 }))
+		waterTiles.map(({ x, y }) => ({ x: x + 0.5, y: 0.018, z: y + 0.5 }))
 	);
 
 	// --- track: sleepers (one field) + rails (grouped by path shape) ---
@@ -210,6 +216,7 @@
 <InstancedField geometry={tuftGeo} material={tuftMat} items={grassBlades} castShadow />
 <InstancedField geometry={patchGeo} material={stonePatchMat} items={stonePatches} receiveShadow />
 <InstancedField geometry={pebbleGeo} material={pebbleMat} items={pebbles} castShadow />
+<InstancedField geometry={patchGeo} material={waterBedMat} items={waterBed} receiveShadow />
 <InstancedField geometry={patchGeo} material={waterMat} items={water} receiveShadow />
 
 <InstancedField

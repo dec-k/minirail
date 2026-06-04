@@ -49,12 +49,19 @@ export const grassPatchMat = new THREE.MeshStandardMaterial({ color: '#7faf5a', 
 export const stonePatchMat = new THREE.MeshStandardMaterial({ color: '#b8b2a6', roughness: 1 });
 export const tuftMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 });
 export const pebbleMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 });
+// Pond is two stacked planes: an opaque "bed" so no cream ground shows through,
+// and a glossy translucent surface above it that reads as water depth and catches
+// a sun glint. Both are flat instanced patches → two cheap draw calls total.
+export const waterBedMat = new THREE.MeshStandardMaterial({
+	color: '#1c5b86',
+	roughness: 0.65
+});
 export const waterMat = new THREE.MeshStandardMaterial({
-	color: '#3a8fc7',
+	color: '#4aa6d8',
 	transparent: true,
-	opacity: 0.88,
-	roughness: 0.2,
-	metalness: 0.15
+	opacity: 0.62,
+	roughness: 0.12,
+	metalness: 0.25
 });
 export const sleeperMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95 });
 export const railMat = new THREE.MeshStandardMaterial({

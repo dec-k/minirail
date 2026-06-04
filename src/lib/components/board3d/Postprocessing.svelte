@@ -24,10 +24,13 @@
 	function setup(cam: THREE.PerspectiveCamera) {
 		composer.removeAllPasses();
 		composer.addPass(new RenderPass(scene, cam));
+		// focusRange is in WORLD units (the old `focalLength` option was a deprecated
+		// alias for it, and 0.04 made the in-focus slab paper-thin → whole frame blurred).
+		// We refocus + rescale this band every frame in the task below so it tracks zoom.
 		dof = new DepthOfFieldEffect(cam, {
 			focusDistance: 0,
-			focalLength: 0.04,
-			bokehScale: 3.2,
+			focusRange: 14,
+			bokehScale: 2.4,
 			resolutionScale: 0.85
 		});
 		dof.target = new THREE.Vector3(0, 0, 0);
@@ -64,6 +67,11 @@
 					const t = -cam.position.y / fwd.y;
 					if (t > 0) dof.target.copy(cam.position).addScaledVector(fwd, t);
 				}
+				// Keep the in-focus band proportional to how far the aim point is, so the
+				// miniature blur is strong when orbiting out and naturally relaxes as you
+				// zoom in or tilt top-down (where the frame spans much less depth).
+				const dist = cam.position.distanceTo(dof.target);
+				dof.cocMaterial.focusRange = dist * 0.5;
 			}
 			composer.render(delta);
 		},

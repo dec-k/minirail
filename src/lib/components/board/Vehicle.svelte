@@ -120,14 +120,7 @@
 			stroke-width="1.5"
 		/>
 		{#if occupied}
-			<circle
-				cx="0"
-				cy="0"
-				r={TILE * 0.06}
-				fill="#fbe49d"
-				stroke="#7a5535"
-				stroke-width="0.7"
-			/>
+			<circle cx="0" cy="0" r={TILE * 0.06} fill="#fbe49d" stroke="#7a5535" stroke-width="0.7" />
 		{/if}
 	{/if}
 </g>

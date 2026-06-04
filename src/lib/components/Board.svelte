@@ -12,7 +12,6 @@
 		setDecoration
 	} from '$lib/railway/grid.svelte';
 	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
-	import { view, TILT_DEG } from '$lib/railway/view.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { sample } from '$lib/railway/geometry';
 	import {
@@ -181,9 +180,7 @@
 		// convenience for users who expect it.
 		const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
 		const toolPan = tool === 'pan' && (e.button === 0 || isTouch);
-		// In tilted view, editing is off, so let any primary drag pan the diorama.
-		const tiltedPan = view.tilted && (e.button === 0 || isTouch);
-		if (e.button !== 1 && e.button !== 2 && !toolPan && !tiltedPan) return;
+		if (e.button !== 1 && e.button !== 2 && !toolPan) return;
 		e.preventDefault();
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		pan = {
@@ -260,7 +257,6 @@
 	function handlePointerDown(e: PointerEvent) {
 		if (e.button !== 0 || e.shiftKey) return;
 		if (tool === 'pan') return;
-		if (view.tilted) return; // editing disabled in tilted view (see view.svelte.ts)
 		const svg = e.currentTarget as SVGSVGElement;
 		const cell = cellFromEvent(e, svg);
 		if (!cell) return;
@@ -330,7 +326,6 @@
 	}
 
 	function handleClick(e: MouseEvent) {
-		if (view.tilted) return; // editing disabled in tilted view (see view.svelte.ts)
 		const svg = e.currentTarget as SVGSVGElement;
 		const cell = cellFromEvent(e, svg);
 		if (!cell) return;
@@ -393,7 +388,6 @@
 	class="absolute inset-0 touch-pinch-zoom overflow-hidden bg-background"
 	class:cursor-grab={tool === 'pan' && pan === null}
 	class:cursor-grabbing={pan !== null}
-	style="perspective: 1700px;"
 	onwheel={handleWheel}
 	onpointerdown={handlePanDown}
 	onpointermove={handlePanMove}
@@ -402,99 +396,81 @@
 	onauxclick={(e) => e.preventDefault()}
 	oncontextmenu={(e) => e.preventDefault()}
 >
-	<!-- Tilt layer: leans the whole board back into a tabletop diorama. Kept
-	 separate from the pan/zoom transform below so the 600ms tilt easing never
-	 lags rapid pan updates. transform is `none` when flat so getScreenCTM stays
-	 a clean 2D matrix for pointer → cell mapping. -->
 	<div
-		class="tilt-layer absolute inset-0"
-		style="transform: {view.tilted ? `rotateX(${TILT_DEG}deg)` : 'none'};"
+		class="board-surface absolute top-0 left-0 origin-top-left overflow-hidden rounded-lg bg-board-bg shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
+		style="transform: translate({panX}px, {panY}px) scale({zoom})"
 	>
-		<div
-			class="board-surface absolute top-0 left-0 origin-top-left overflow-hidden rounded-lg bg-board-bg shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
-			class:board-tilted={view.tilted}
-			style="transform: translate({panX}px, {panY}px) scale({zoom})"
+		<svg
+			viewBox="0 0 {widthPx} {heightPx}"
+			width={widthPx}
+			height={heightPx}
+			class="block select-none"
+			class:cursor-crosshair={tool === 'draw'}
+			onclick={handleClick}
+			onpointerdown={handlePointerDown}
+			onpointermove={handlePointerMove}
+			onpointerup={handlePointerUp}
+			onpointercancel={handlePointerUp}
+			role="img"
+			aria-label="Track grid"
 		>
-			<svg
-				viewBox="0 0 {widthPx} {heightPx}"
-				width={widthPx}
-				height={heightPx}
-				class="block select-none"
-				class:cursor-crosshair={tool === 'draw'}
-				onclick={handleClick}
-				onpointerdown={handlePointerDown}
-				onpointermove={handlePointerMove}
-				onpointerup={handlePointerUp}
-				onpointercancel={handlePointerUp}
-				role="img"
-				aria-label="Track grid"
-			>
-				<defs>
-					<pattern id="gridPattern" width={TILE} height={TILE} patternUnits="userSpaceOnUse">
-						<path
-							d={`M ${TILE} 0 L 0 0 0 ${TILE}`}
-							fill="none"
-							class="stroke-board-grid"
-							stroke-width="1"
-						/>
-					</pattern>
-				</defs>
-
-				<rect width={widthPx} height={heightPx} fill="url(#gridPattern)" />
-
-				{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
-					<GroundOverTile {x} {y} kind={groundOver.kind} />
-				{/each}
-
-				{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
-					<DecorationTile {x} {y} kind={decoration.kind} />
-				{/each}
-
-				{#each cellEntries as { x, y, piece } (`${x},${y}`)}
-					<TrackTile {x} {y} {piece} />
-				{/each}
-
-				{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
-					<StationTile {x} {y} {station} />
-				{/each}
-
-				{#each vehiclePoses as pose (pose.key)}
-					<Vehicle
-						kind={pose.kind}
-						color={pose.color}
-						occupied={pose.occupied}
-						x={pose.x}
-						y={pose.y}
-						heading={pose.heading}
+			<defs>
+				<pattern id="gridPattern" width={TILE} height={TILE} patternUnits="userSpaceOnUse">
+					<path
+						d={`M ${TILE} 0 L 0 0 0 ${TILE}`}
+						fill="none"
+						class="stroke-board-grid"
+						stroke-width="1"
 					/>
-				{/each}
-			</svg>
-			<ParticleLayer {widthPx} {heightPx} />
-			<svg
-				viewBox="0 0 {widthPx} {heightPx}"
-				width={widthPx}
-				height={heightPx}
-				class="pointer-events-none absolute top-0 left-0 block select-none"
-				role="presentation"
-			>
-				{#each locoBadges as b (b.key)}
-					<LocoBadge
-						x={b.x}
-						y={b.y}
-						passengers={b.passengers}
-						capacity={b.capacity}
-						boarding={b.boarding}
-					/>
-				{/each}
-			</svg>
-		</div>
+				</pattern>
+			</defs>
+
+			<rect width={widthPx} height={heightPx} fill="url(#gridPattern)" />
+
+			{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
+				<GroundOverTile {x} {y} kind={groundOver.kind} />
+			{/each}
+
+			{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
+				<DecorationTile {x} {y} kind={decoration.kind} />
+			{/each}
+
+			{#each cellEntries as { x, y, piece } (`${x},${y}`)}
+				<TrackTile {x} {y} {piece} />
+			{/each}
+
+			{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
+				<StationTile {x} {y} {station} />
+			{/each}
+
+			{#each vehiclePoses as pose (pose.key)}
+				<Vehicle
+					kind={pose.kind}
+					color={pose.color}
+					occupied={pose.occupied}
+					x={pose.x}
+					y={pose.y}
+					heading={pose.heading}
+				/>
+			{/each}
+		</svg>
+		<ParticleLayer {widthPx} {heightPx} />
+		<svg
+			viewBox="0 0 {widthPx} {heightPx}"
+			width={widthPx}
+			height={heightPx}
+			class="pointer-events-none absolute top-0 left-0 block select-none"
+			role="presentation"
+		>
+			{#each locoBadges as b (b.key)}
+				<LocoBadge
+					x={b.x}
+					y={b.y}
+					passengers={b.passengers}
+					capacity={b.capacity}
+					boarding={b.boarding}
+				/>
+			{/each}
+		</svg>
 	</div>
 </div>
-
-<style>
-	.tilt-layer {
-		transform-origin: 50% 50%;
-		transform-style: preserve-3d;
-		transition: transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
-	}
-</style>

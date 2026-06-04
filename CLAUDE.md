@@ -43,7 +43,7 @@ Module-level `$state` is used for all world and simulation state. Four independe
   - `cells: Piece` — track pieces
   - `stations: Station` — platforms (only meaningful on cells that also hold track)
   - `decorations: Decoration` — tree/building/water; **mutually exclusive with track at the same cell**
-  - `groundOvers: Decoration` — grass/stone; render *under* track and may coexist with anything
+  - `groundOvers: Decoration` — grass/stone; render _under_ track and may coexist with anything
 
   Mutators: `placePiece`, `setPiece`, `rotateAt`, `toggleAt`, `removeAt`, `drawPath`, `toggleStationAt`, `placeDecoration`, `setDecoration`, `clearAll`, `resize`. **Use `SvelteMap` (not plain `Map`) so mutations stay reactive.** Edits call `markDirty()` from `doc.svelte.ts` so the UI can show an "unsaved" indicator; bulk-restore paths (`setPiece`, `setDecoration`) deliberately skip `markDirty` because they're driven by `applyLayout`.
 
@@ -68,7 +68,7 @@ A `Loco` is a `Vehicle` (`{x, y, pathIdx, t, dir, stopped, routingCursor}`) plus
 Movement is **physics-based**, not constant-velocity:
 
 - Per-loco `speed` ramps toward `throttle` (when powered) or `0` (braking) at `ACCELERATION` / `DECELERATION` rates — brakes are deliberately stronger than accel so stops feel snappy.
-- Each frame, three independent lookaheads scan the route from the leading vehicle: `distanceToNextStop` (next station that would actually do something — drop off a foreign passenger or board a new one), `distanceToNextVehicle` (collision with another train: same tile *and* same pathIdx), `distanceToDeadEnd`. The min is the obstacle distance; within `APPROACH_DIST` the throttle target attenuates linearly so the train arrives at zero speed.
+- Each frame, three independent lookaheads scan the route from the leading vehicle: `distanceToNextStop` (next station that would actually do something — drop off a foreign passenger or board a new one), `distanceToNextVehicle` (collision with another train: same tile _and_ same pathIdx), `distanceToDeadEnd`. The min is the obstacle distance; within `APPROACH_DIST` the throttle target attenuates linearly so the train arrives at zero speed.
 - `step(vehicle, distance, motionSign, trail, siblings)` walks one vehicle by a distance, carrying remainder across tile boundaries in a `while` loop (high speed / dropped frames don't skip tiles). It's used for the loco, each wagon, and the wagon-placement probe.
 - When reversing (`reverser = -1`), the **rearmost wagon is the leader** for obstacle lookups.
 - At a dead end (within `DEAD_END_SNAP` of the wall), `resolveDeadEnd` either flips the reverser (`autoReverse` on) or drops it to neutral (off).
@@ -86,7 +86,7 @@ The naive rule ("at a facing-point, pick `paths[active]`") would derail wagons w
 
 Stations only exist on cells that already contain track. Each station has `peopleWaiting` and a `spawnTimer` ticking at `STATION_SPAWN_INTERVAL` up to `STATION_CAPACITY`. Stations actively being boarded freeze their spawn timer.
 
-`shouldStopAt(loco, key)` returns true only when stopping would *do something* — drop off a foreign-origin passenger (one whose recorded boarding key isn't this station) or board a new one with wagon capacity to spare. Boarding ticks at `BOARDING_INTERVAL`: phase 1 dismounts one foreign passenger, phase 2 boards one waiting person. `lastBoardedAt` suppresses re-triggering on the same tile until the loco physically leaves. Passengers per loco are capped by `wagons.length`.
+`shouldStopAt(loco, key)` returns true only when stopping would _do something_ — drop off a foreign-origin passenger (one whose recorded boarding key isn't this station) or board a new one with wagon capacity to spare. Boarding ticks at `BOARDING_INTERVAL`: phase 1 dismounts one foreign passenger, phase 2 boards one waiting person. `lastBoardedAt` suppresses re-triggering on the same tile until the loco physically leaves. Passengers per loco are capped by `wagons.length`.
 
 ### Coordinate spaces — three of them
 

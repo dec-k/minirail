@@ -38,7 +38,7 @@
 			stroke="#7a6543"
 			stroke-width="1"
 		/>
-		<g class="standee" style="--pop: 1.3; --rise: 4px;">
+		<g>
 			<rect
 				x={TILE * 0.32}
 				y={TILE * 0.64}
@@ -77,7 +77,7 @@
 			stroke="#7a6543"
 			stroke-width="1"
 		/>
-		<g class="standee" style="--pop: 1.3; --rise: 4px;">
+		<g>
 			<rect
 				x={TILE * 0.64}
 				y={TILE * 0.45}
@@ -106,7 +106,7 @@
 			/>
 		{/each}
 	{/if}
-	<g class="standee" style="--pop: 1.35; --rise: 6px;">
+	<g>
 		<rect
 			x={TILE * 0.08}
 			y={TILE * 0.04}

@@ -85,7 +85,7 @@
 					fill="#000"
 					fill-opacity="0.18"
 				/>
-				<g class="standee" style="--pop: 1.4; --rise: 5px;">
+				<g>
 					<rect
 						x={tx - TILE * 0.025}
 						y={ty + tr * 0.4}
@@ -126,7 +126,7 @@
 					fill="#000"
 					fill-opacity="0.18"
 				/>
-				<g class="standee" style="--pop: 1.5; --rise: 7px;">
+				<g>
 					<rect
 						x={bodyLeft}
 						y={bodyTop}

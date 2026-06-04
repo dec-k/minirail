@@ -155,6 +155,36 @@
 		};
 	});
 
+	// Soft, slightly irregular puff texture shared by every steam sprite — a few
+	// overlapping radial gradients read as billowing vapour instead of a hard
+	// sphere, and one shared texture keeps it cheap. White so each sprite can be
+	// tinted per-puff.
+	function smokeTexture() {
+		const c = document.createElement('canvas');
+		c.width = c.height = 64;
+		const ctx = c.getContext('2d')!;
+		const blob = (cx: number, cy: number, r: number, a: number) => {
+			const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+			g.addColorStop(0, `rgba(255,255,255,${a})`);
+			g.addColorStop(0.6, `rgba(255,255,255,${a * 0.4})`);
+			g.addColorStop(1, 'rgba(255,255,255,0)');
+			ctx.fillStyle = g;
+			ctx.fillRect(0, 0, 64, 64);
+		};
+		blob(32, 32, 30, 0.9);
+		blob(24, 27, 17, 0.5);
+		blob(41, 37, 15, 0.5);
+		const tex = new THREE.CanvasTexture(c);
+		tex.colorSpace = THREE.SRGBColorSpace;
+		return tex;
+	}
+	let smokeTex = $state<THREE.Texture>();
+	$effect(() => {
+		const tex = smokeTexture();
+		smokeTex = tex;
+		return () => tex.dispose();
+	});
+
 	// Mirrors Board.svelte's click handler. Raycasting replaces getScreenCTM, so
 	// this works at any camera angle.
 	function editAt(x: number, y: number, shift: boolean) {
@@ -262,14 +292,27 @@
 		<Vehicle3D kind={p.kind} color={p.color} occupied={p.occupied} x={p.x} z={p.z} rotY={p.rotY} />
 	{/each}
 
-	<!-- Steam puffs: grid-coord particles owned by the sim loop. They rise in Y
-		 over their life and fade out, drawn unlit so they read as light vapour. -->
-	{#each particles.list as pt (pt.id)}
-		{@const t = Math.min(1, pt.life / pt.maxLife)}
-		{@const r = 0.1 + t * 0.22}
-		<T.Mesh position={[pt.x, 0.42 + t * 0.5, pt.y]} scale={r}>
-			<T.SphereGeometry args={[1, 8, 8]} />
-			<T.MeshBasicMaterial color="#ffffff" transparent opacity={(1 - t) * 0.5} depthWrite={false} />
-		</T.Mesh>
-	{/each}
+	<!-- Steam puffs: grid-coord particles owned by the sim loop. Drawn as
+		 camera-facing sprites with a soft puff texture — they grow and rise over
+		 their life, fade in then out, spin slowly, and lighten from a sooty grey
+		 at the funnel to near-white as they dissipate. Emitted just above the
+		 funnel top (~0.53) so they no longer clip into the chimney. -->
+	{#if smokeTex}
+		{#each particles.list as pt (pt.id)}
+			{@const t = Math.min(1, pt.life / pt.maxLife)}
+			{@const r = 0.16 + t * 0.42}
+			{@const op = Math.sin(t * Math.PI) * 0.45}
+			{@const sh = 205 + Math.round(t * 42)}
+			<T.Sprite position={[pt.x, 0.58 + t * 0.6, pt.y]} scale={[r, r, r]}>
+				<T.SpriteMaterial
+					map={smokeTex}
+					color={`rgb(${sh},${sh},${sh + 4})`}
+					transparent
+					opacity={op}
+					depthWrite={false}
+					rotation={pt.id * 1.7 + pt.life * 0.5}
+				/>
+			</T.Sprite>
+		{/each}
+	{/if}
 </T.Group>

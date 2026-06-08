@@ -9,14 +9,24 @@
 		rotateAt,
 		removeAt,
 		toggleAt,
+		drawPath,
 		toggleStationAt,
-		placeDecoration
+		placeDecoration,
+		setDecoration
 	} from '$lib/railway/grid.svelte';
 	import { sim, placeLoco, kickSimulation } from '$lib/railway/sim.svelte';
 	import { particles } from '$lib/railway/particles.svelte';
 	import { sample } from '$lib/railway/geometry';
 	import { pathsOf } from '$lib/railway/pieces';
-	import { isSwitch, type DecorationKind, type PieceKind } from '$lib/railway/types';
+	import {
+		dx,
+		dy,
+		opposite,
+		isSwitch,
+		type DecorationKind,
+		type Dir,
+		type PieceKind
+	} from '$lib/railway/types';
 	import Scenery3D from './Scenery3D.svelte';
 	import Station3D from './Station3D.svelte';
 	import Vehicle3D from './Vehicle3D.svelte';
@@ -185,15 +195,27 @@
 		return () => tex.dispose();
 	});
 
-	// Mirrors Board.svelte's click handler. Raycasting replaces getScreenCTM, so
-	// this works at any camera angle.
+	// Resolve a world-space raycast hit to a grid cell. The ground mesh lives in a
+	// group offset by [-w/2, 0, -h/2], so a hit's world x/z map back to cell
+	// coordinates with the same +w/2 / +h/2 shift onGroundClick used. Raycasting
+	// replaces getScreenCTM, so this works at any camera angle.
+	function cellFromPoint(p: THREE.Vector3) {
+		const x = Math.floor(p.x + w / 2);
+		const y = Math.floor(p.z + h / 2);
+		if (x < 0 || x >= w || y < 0 || y >= h) return null;
+		return { x, y };
+	}
+
+	// Mirrors Board.svelte's click handler for the non-drag tools. 'draw' and
+	// 'decorate' are handled by the pointer state machines below, so editAt skips
+	// them (shift-toggle still works regardless of the selected tool).
 	function editAt(x: number, y: number, shift: boolean) {
 		const existing = getPiece(x, y);
 		if (shift) {
 			if (existing && isSwitch(existing.kind)) toggleAt(x, y);
 			return;
 		}
-		if (tool === 'pan') return;
+		if (tool === 'pan' || tool === 'draw' || tool === 'decorate') return;
 		if (tool === 'erase') {
 			removeAt(x, y);
 			return;
@@ -207,25 +229,170 @@
 			kickSimulation();
 			return;
 		}
-		if (tool === 'decorate') {
-			placeDecoration(x, y, decorationKind);
-			return;
-		}
-		// Piece tools. 'draw' has no drag equivalent in 3D yet (Stage 4), so a
-		// click lays a straight as a stand-in.
-		const kind: PieceKind = tool === 'draw' ? 'straight' : (tool as PieceKind);
+		// Piece tools.
+		const kind = tool as PieceKind;
 		if (existing && existing.kind === kind) rotateAt(x, y);
 		else placePiece(x, y, kind);
 	}
 
 	function onGroundClick(e: IntersectionEvent<MouseEvent>) {
-		const p = e.point; // world-space hit point
-		const x = Math.floor(p.x + w / 2);
-		const y = Math.floor(p.z + h / 2);
-		if (x < 0 || x >= w || y < 0 || y >= h) return;
+		const cell = cellFromPoint(e.point);
+		if (!cell) return;
 		e.stopPropagation();
-		editAt(x, y, e.nativeEvent.shiftKey);
+		editAt(cell.x, cell.y, e.nativeEvent.shiftKey);
 	}
+
+	// --- Drag placement (ports Board.svelte's draw + decorate state machines) ---
+
+	function stepDirToward(from: { x: number; y: number }, to: { x: number; y: number }): Dir {
+		const ddx = to.x - from.x;
+		const ddy = to.y - from.y;
+		if (Math.abs(ddx) >= Math.abs(ddy)) return (ddx > 0 ? 1 : 3) as Dir;
+		return (ddy > 0 ? 2 : 0) as Dir;
+	}
+
+	type DrawState = {
+		pointerId: number;
+		moved: boolean;
+		// The cell currently "in progress" — its entry port is known but its exit
+		// port won't be decided until the cursor moves into a neighbour.
+		lastCell: { x: number; y: number };
+		lastEntry: Dir | null;
+	};
+	let draw: DrawState | null = null;
+
+	type PaintState = {
+		pointerId: number;
+		moved: boolean;
+		startCell: { x: number; y: number };
+		lastCell: { x: number; y: number };
+		kind: DecorationKind;
+	};
+	let paint: PaintState | null = null;
+
+	function advanceDraw(target: { x: number; y: number }) {
+		if (!draw) return;
+		let safety = 1000;
+		while (safety-- > 0) {
+			const last = draw.lastCell;
+			if (last.x === target.x && last.y === target.y) break;
+			const stepDir = stepDirToward(last, target);
+			const entry = draw.lastEntry ?? opposite(stepDir);
+			drawPath(last.x, last.y, entry, stepDir);
+			draw.lastCell = { x: last.x + dx[stepDir], y: last.y + dy[stepDir] };
+			draw.lastEntry = opposite(stepDir);
+			draw.moved = true;
+		}
+	}
+
+	function advancePaint(target: { x: number; y: number }) {
+		if (!paint) return;
+		let safety = 1000;
+		while (safety-- > 0) {
+			const last = paint.lastCell;
+			if (last.x === target.x && last.y === target.y) break;
+			const stepDir = stepDirToward(last, target);
+			const nx = last.x + dx[stepDir];
+			const ny = last.y + dy[stepDir];
+			setDecoration(nx, ny, paint.kind);
+			paint.lastCell = { x: nx, y: ny };
+			paint.moved = true;
+		}
+	}
+
+	function onGroundPointerDown(e: IntersectionEvent<PointerEvent>) {
+		const ne = e.nativeEvent;
+		if (ne.button !== 0 || ne.shiftKey) return;
+		if (tool !== 'draw' && tool !== 'decorate') return;
+		const cell = cellFromPoint(e.point);
+		if (!cell) return;
+		e.stopPropagation();
+		if (tool === 'draw') {
+			draw = { pointerId: ne.pointerId, moved: false, lastCell: cell, lastEntry: null };
+		} else {
+			paint = {
+				pointerId: ne.pointerId,
+				moved: false,
+				startCell: cell,
+				lastCell: cell,
+				kind: decorationKind
+			};
+		}
+	}
+
+	function onGroundPointerMove(e: IntersectionEvent<PointerEvent>) {
+		const id = e.nativeEvent.pointerId;
+		if (draw && id === draw.pointerId) {
+			const cell = cellFromPoint(e.point);
+			if (!cell) return;
+			advanceDraw(cell);
+			return;
+		}
+		if (paint && id === paint.pointerId) {
+			const cell = cellFromPoint(e.point);
+			if (!cell) return;
+			if (cell.x === paint.lastCell.x && cell.y === paint.lastCell.y) return;
+			// First movement confirms a drag — place the starting cell too so the
+			// painted line includes where the user pressed down.
+			if (!paint.moved) setDecoration(paint.startCell.x, paint.startCell.y, paint.kind);
+			advancePaint(cell);
+		}
+	}
+
+	// Finalisers, factored out so a pointerup that lands off the ground mesh (over
+	// the sky) can still close out the drag via the window listener below.
+	function finishDraw() {
+		if (!draw) return;
+		if (draw.moved && draw.lastEntry !== null) {
+			// Stub the trailing cell as a straight extension.
+			const { x, y } = draw.lastCell;
+			drawPath(x, y, draw.lastEntry, opposite(draw.lastEntry));
+		} else if (!draw.moved) {
+			// A click without a drag lays/rotates a straight as a stand-in.
+			const { x, y } = draw.lastCell;
+			const existing = getPiece(x, y);
+			if (existing && existing.kind === 'straight') rotateAt(x, y);
+			else placePiece(x, y, 'straight');
+		}
+		draw = null;
+	}
+
+	function finishPaint() {
+		if (!paint) return;
+		// A click without a drag falls through to toggle semantics so the user can
+		// still single-click to remove a decoration of the same kind.
+		if (!paint.moved) placeDecoration(paint.startCell.x, paint.startCell.y, paint.kind);
+		paint = null;
+	}
+
+	function onGroundPointerUp(e: IntersectionEvent<PointerEvent>) {
+		const id = e.nativeEvent.pointerId;
+		if (draw && id === draw.pointerId) {
+			e.stopPropagation();
+			finishDraw();
+			return;
+		}
+		if (paint && id === paint.pointerId) {
+			e.stopPropagation();
+			finishPaint();
+		}
+	}
+
+	// Safety net: if the pointer is released while aimed at the sky (off the ground
+	// mesh), no mesh pointerup fires — close out any in-progress drag here so it
+	// can't get stuck.
+	$effect(() => {
+		const onUp = () => {
+			finishDraw();
+			finishPaint();
+		};
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onUp);
+		return () => {
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onUp);
+		};
+	});
 </script>
 
 <T.PerspectiveCamera makeDefault position={[0, 30, 36]} fov={45}>
@@ -272,6 +439,9 @@
 		position={[w / 2, 0, h / 2]}
 		receiveShadow
 		onclick={onGroundClick}
+		onpointerdown={onGroundPointerDown}
+		onpointermove={onGroundPointerMove}
+		onpointerup={onGroundPointerUp}
 	>
 		<T.PlaneGeometry args={[groundSize, groundSize]} />
 		<T.MeshStandardMaterial color={groundColor} roughness={1} />

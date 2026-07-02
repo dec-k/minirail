@@ -26,6 +26,12 @@ export const sim = $state({
 });
 
 export const MAX_THROTTLE = 8;
+// The three throttle notches exposed in the UI (slow / medium / fast). The
+// loco panel renders these as >, >>, >>> — there is no zero notch; stopping is
+// owned by the reverser's neutral position. DEFAULT_THROTTLE is the notch a
+// freshly placed loco starts on so it moves as soon as the reverser engages.
+export const THROTTLE_LEVELS = [1, 3, 5] as const;
+export const DEFAULT_THROTTLE = 1;
 export const WAGON_LENGTH = 0.6;
 // People stop at the centre of the station tile; at this distance the loco
 // begins decelerating to arrive at zero speed.
@@ -96,6 +102,7 @@ export function placeLoco(x: number, y: number) {
 	sim.locos.push({
 		id: nextLocoId++,
 		color: pickColor(),
+		name: '',
 		x,
 		y,
 		pathIdx: 0,
@@ -103,7 +110,7 @@ export function placeLoco(x: number, y: number) {
 		dir: 1,
 		stopped: false,
 		reverser: 0,
-		throttle: 0,
+		throttle: DEFAULT_THROTTLE,
 		speed: 0,
 		routingCursor: 0,
 		wagons: [],
@@ -145,7 +152,10 @@ export type SavedLocoState = {
 	t: number;
 	dir: 1 | -1;
 	color: string;
+	name?: string;
 	wagons: number;
+	reverser?: Reverser;
+	throttle?: number;
 	autoReverse?: boolean;
 	switchLine?: boolean;
 };
@@ -164,14 +174,15 @@ export function replaceLocos(saved: SavedLocoState[]) {
 		const loco: Loco = {
 			id: nextLocoId++,
 			color: s.color,
+			name: s.name ?? '',
 			x: s.x,
 			y: s.y,
 			pathIdx: s.pathIdx,
 			t: s.t,
 			dir: s.dir,
 			stopped: false,
-			reverser: 0,
-			throttle: 0,
+			reverser: s.reverser ?? 0,
+			throttle: s.throttle ?? DEFAULT_THROTTLE,
 			speed: 0,
 			routingCursor: 0,
 			wagons: [],
@@ -378,9 +389,7 @@ type WalkTile = {
 	first: boolean;
 };
 
-type WalkEnd =
-	| { kind: 'deadEnd'; distance: number }
-	| { kind: 'tooFar' };
+type WalkEnd = { kind: 'deadEnd'; distance: number } | { kind: 'tooFar' };
 
 // Read-only walk along a vehicle's intended route, yielding one entry per tile
 // visited. `distAtStart` is the cumulative distance from `start` to the entry-
@@ -780,6 +789,7 @@ export function setReverser(id: number, r: Reverser) {
 		if (loco.stopped) loco.stopped = false;
 		for (const w of loco.wagons) if (w.stopped) w.stopped = false;
 	}
+	markDirty();
 	startLoopIfNeeded();
 }
 
@@ -800,15 +810,38 @@ export function setSwitchLine(id: number, on: boolean) {
 	markDirty();
 }
 
+export function setLocoName(id: number, name: string) {
+	const loco = findLoco(id);
+	if (!loco) return;
+	// Cap length so a runaway paste can't blow out the header / chip layout.
+	const next = name.slice(0, 40);
+	if (next === loco.name) return;
+	loco.name = next;
+	markDirty();
+}
+
+// Only colours from the shared palette are accepted, so saves stay within the
+// known set and every loco keeps a theme-safe, contrast-checked colour.
+export function setLocoColor(id: number, color: string) {
+	const loco = findLoco(id);
+	if (!loco) return;
+	if (!LOCO_COLORS.includes(color)) return;
+	if (color === loco.color) return;
+	loco.color = color;
+	markDirty();
+}
+
 export function setThrottle(id: number, t: number) {
 	const loco = findLoco(id);
 	if (!loco) return;
 	const clamped = Math.max(0, Math.min(MAX_THROTTLE, t));
+	if (clamped === loco.throttle) return;
 	loco.throttle = clamped;
 	if (clamped > 0 && loco.reverser !== 0) {
 		if (loco.stopped) loco.stopped = false;
 		for (const w of loco.wagons) if (w.stopped) w.stopped = false;
 	}
+	markDirty();
 	startLoopIfNeeded();
 }
 

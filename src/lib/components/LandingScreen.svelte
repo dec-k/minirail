@@ -155,13 +155,18 @@
 			>
 				<Button
 					size="lg"
-					class="flex-1 bg-linear-to-r from-blue-500 to-purple-500 font-bold text-white"
+					class="w-full shrink-0 bg-linear-to-r from-blue-500 to-purple-500 font-bold text-white sm:flex-1"
 					onclick={startNew}
 				>
 					<TrainTrack />
 					New
 				</Button>
-				<Button variant="outline" size="lg" class="flex-1" onclick={() => (view = 'load')}>
+				<Button
+					variant="outline"
+					size="lg"
+					class="w-full shrink-0 sm:flex-1"
+					onclick={() => (view = 'load')}
+				>
 					<FolderOpen />
 					Load
 				</Button>

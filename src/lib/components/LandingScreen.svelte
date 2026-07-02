@@ -20,12 +20,21 @@
 
 	let { onstart }: { onstart: () => void } = $props();
 
+	// Drives the backdrop's CSS opacity transition. Starts hidden and flips true
+	// only after the scene has been applied and painted, so the fade is smooth
+	// regardless of when the (many) tiles finish rendering — a Svelte `in:` fade
+	// on the wrapper pops instead, because its children populate a frame late.
+	let backdropReady = $state(false);
+
 	// Populate the live world with a decorative sample layout so the backdrop has
 	// something to render. Safe to load into the real stores: the landing screen
 	// only shows before the canvas starts, and every start action (New / open a
 	// save / import) overwrites this first.
 	onMount(() => {
 		applyLayout(backdropLayout as unknown as SavedLayout, null);
+		// Two frames: one for Svelte to flush the tile DOM, one for it to paint at
+		// opacity 0, so the following opacity change actually animates.
+		requestAnimationFrame(() => requestAnimationFrame(() => (backdropReady = true)));
 	});
 
 	let entries = $state<SavedEntry[]>([]);
@@ -106,9 +115,9 @@
 >
 	<!-- Decorative, zoomed-in, partly-opaque view of a running layout. -->
 	<div
-		class="pointer-events-none absolute inset-0 opacity-25 blur-[1px]"
+		class="pointer-events-none absolute inset-0 blur-[1px] transition-opacity duration-1400 ease-out"
+		style:opacity={backdropReady ? 0.25 : 0}
 		aria-hidden="true"
-		in:fade={{ duration: 1400, delay: 150, easing: cubicOut }}
 	>
 		<LandingBackdrop />
 	</div>

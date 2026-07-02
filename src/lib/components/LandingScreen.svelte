@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Card } from '$lib/components/ui/card';
-	import { Upload, FolderOpen, Trash2, X, Check, TrainTrack } from 'lucide-svelte';
+	import { Upload, FolderOpen, Trash2, X, Check, TrainTrack, ChevronLeft } from 'lucide-svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import {
@@ -11,14 +12,26 @@
 		applyLayout,
 		deleteLocalByKey,
 		newDocument,
-		type SavedEntry
+		type SavedEntry,
+		type SavedLayout
 	} from '$lib/railway/persistence';
+	import LandingBackdrop from './LandingBackdrop.svelte';
+	import backdropLayout from '$lib/railway/landingLayout.json';
 
 	let { onstart }: { onstart: () => void } = $props();
+
+	// Populate the live world with a decorative sample layout so the backdrop has
+	// something to render. Safe to load into the real stores: the landing screen
+	// only shows before the canvas starts, and every start action (New / open a
+	// save / import) overwrites this first.
+	onMount(() => {
+		applyLayout(backdropLayout as unknown as SavedLayout, null);
+	});
 
 	let entries = $state<SavedEntry[]>([]);
 	let fileInput: HTMLInputElement | null = $state(null);
 	let message = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
+	let view = $state<'main' | 'load'>('main');
 
 	function refresh() {
 		entries = listLocalSaves();
@@ -87,11 +100,25 @@
 </script>
 
 <div
-	class="min-h-screen bg-linear-to-b from-background via-background to-muted/40 px-6 py-16 text-foreground"
+	class="relative flex min-h-screen items-center justify-center overflow-hidden bg-linear-to-b from-background via-background to-muted/40 px-6 py-16 text-foreground"
 	in:fade={{ duration: 500, easing: cubicOut }}
 	out:fade={{ duration: 250, easing: cubicOut }}
 >
-	<div class="mx-auto flex max-w-2xl flex-col gap-8">
+	<!-- Decorative, zoomed-in, partly-opaque view of a running layout. -->
+	<div
+		class="pointer-events-none absolute inset-0 opacity-25 blur-[1px]"
+		aria-hidden="true"
+		in:fade={{ duration: 1400, delay: 150, easing: cubicOut }}
+	>
+		<LandingBackdrop />
+	</div>
+	<!-- Scrim to keep the controls legible over the busy scene. -->
+	<div
+		class="pointer-events-none absolute inset-0 bg-linear-to-b from-background/70 via-background/50 to-background/70"
+		aria-hidden="true"
+	></div>
+
+	<div class="relative z-10 flex w-full max-w-md flex-col gap-8">
 		<header
 			class="flex flex-col gap-3 text-center"
 			in:fly={{ y: -16, duration: 600, delay: 100, easing: cubicOut }}
@@ -101,51 +128,103 @@
 			>
 				Minirail
 			</h1>
-			<p class="text-base text-muted-foreground">a super-simple railway sandbox</p>
+			<p class="text-base text-muted-foreground">a game by dec keighley</p>
 		</header>
 
-		<div
-			class="flex flex-col gap-3 text-sm leading-relaxed text-muted-foreground"
-			in:fade={{ duration: 500, delay: 250, easing: cubicOut }}
-		>
-			<p>
-				Create a track using the toolbar, then place a <span class="font-medium text-foreground"
-					>Locomotive</span
-				>. Set the reverser to forward, engage the throttle, and off you go!
-			</p>
-			<p>
-				Switches are thrown by <kbd
-					class="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs"
-					>Shift + LMB</kbd
-				> on the point. The Draw tool can also create switches by dragging onto the side of an existing
-				track.
-			</p>
-		</div>
+		<input
+			type="file"
+			accept=".json,application/json"
+			class="hidden"
+			bind:this={fileInput}
+			onchange={handleFileChosen}
+		/>
 
-		<div
-			class="flex flex-col gap-3 sm:flex-row"
-			in:fly={{ y: 12, duration: 500, delay: 400, easing: cubicOut }}
-		>
-			<Button
-				size="lg"
-				class="flex-1 bg-linear-to-r from-blue-500 to-purple-500 font-bold text-white"
-				onclick={startNew}
+		{#if view === 'main'}
+			<div
+				class="flex flex-col gap-3 sm:flex-row"
+				in:fly={{ y: 12, duration: 500, delay: 400, easing: cubicOut }}
 			>
-				<TrainTrack />
-				New Track
-			</Button>
-			<Button variant="outline" size="lg" class="flex-1" onclick={() => fileInput?.click()}>
-				<Upload />
-				Open File…
-			</Button>
-			<input
-				type="file"
-				accept=".json,application/json"
-				class="hidden"
-				bind:this={fileInput}
-				onchange={handleFileChosen}
-			/>
-		</div>
+				<Button
+					size="lg"
+					class="flex-1 bg-linear-to-r from-blue-500 to-purple-500 font-bold text-white"
+					onclick={startNew}
+				>
+					<TrainTrack />
+					New
+				</Button>
+				<Button variant="outline" size="lg" class="flex-1" onclick={() => (view = 'load')}>
+					<FolderOpen />
+					Load
+				</Button>
+			</div>
+		{:else}
+			<div class="flex flex-col gap-3" in:fade={{ duration: 300, easing: cubicOut }}>
+				<div class="flex items-center gap-2">
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={() => (view = 'main')}
+						aria-label="Back"
+					>
+						<ChevronLeft />
+						Back
+					</Button>
+					<Button variant="outline" size="sm" class="ml-auto" onclick={() => fileInput?.click()}>
+						<Upload />
+						Open File…
+					</Button>
+				</div>
+
+				{#if entries.length > 0}
+					<Card class="p-4">
+						<div class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+							My tracks
+						</div>
+						<div class="flex flex-col gap-1.5">
+							{#each entries as entry (entry.key)}
+								<div
+									class="flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 py-2"
+								>
+									<button
+										type="button"
+										class="flex min-w-0 flex-1 flex-col text-left transition-colors hover:text-foreground"
+										onclick={() => loadEntry(entry)}
+									>
+										<span class="truncate text-sm font-medium">{entry.name}</span>
+										{#if entry.savedAt}
+											<span class="text-xs text-muted-foreground">{fmtTime(entry.savedAt)}</span>
+										{/if}
+									</button>
+									<Button
+										variant="outline"
+										size="sm"
+										onclick={() => loadEntry(entry)}
+										title="Open this track"
+									>
+										<FolderOpen />
+										Open
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										class="text-muted-foreground hover:text-destructive"
+										onclick={() => deleteEntry(entry.key)}
+										aria-label="Delete {entry.name}"
+										title="Delete"
+									>
+										<Trash2 />
+									</Button>
+								</div>
+							{/each}
+						</div>
+					</Card>
+				{:else}
+					<p class="rounded-md border border-border/70 bg-muted/40 px-3 py-6 text-center text-sm text-muted-foreground">
+						No saved tracks yet. Start a new one, or open a file.
+					</p>
+				{/if}
+			</div>
+		{/if}
 
 		{#if message}
 			<div
@@ -161,53 +240,6 @@
 					<X class="size-4" />
 				{/if}
 				<span>{message.text}</span>
-			</div>
-		{/if}
-
-		{#if entries.length > 0}
-			<div in:fade={{ duration: 500, delay: 550, easing: cubicOut }}>
-				<Card class="p-4">
-					<div class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-						My tracks
-					</div>
-					<div class="flex flex-col gap-1.5">
-						{#each entries as entry (entry.key)}
-							<div
-								class="flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 py-2"
-							>
-								<button
-									type="button"
-									class="flex min-w-0 flex-1 flex-col text-left transition-colors hover:text-foreground"
-									onclick={() => loadEntry(entry)}
-								>
-									<span class="truncate text-sm font-medium">{entry.name}</span>
-									{#if entry.savedAt}
-										<span class="text-xs text-muted-foreground">{fmtTime(entry.savedAt)}</span>
-									{/if}
-								</button>
-								<Button
-									variant="outline"
-									size="sm"
-									onclick={() => loadEntry(entry)}
-									title="Open this track"
-								>
-									<FolderOpen />
-									Open
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon-sm"
-									class="text-muted-foreground hover:text-destructive"
-									onclick={() => deleteEntry(entry.key)}
-									aria-label="Delete {entry.name}"
-									title="Delete"
-								>
-									<Trash2 />
-								</Button>
-							</div>
-						{/each}
-					</div>
-				</Card>
 			</div>
 		{/if}
 	</div>

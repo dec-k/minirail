@@ -3,12 +3,15 @@
 	import { sim } from '$lib/railway/sim.svelte';
 	import { pathsOf } from '$lib/railway/pieces';
 	import { sample } from '$lib/railway/geometry';
+	import { walkers } from '$lib/railway/particles.svelte';
+	import { personColor } from '$lib/railway/people';
 	import { TILE } from './board/constants';
 	import GroundOverTile from './board/GroundOverTile.svelte';
 	import DecorationTile from './board/DecorationTile.svelte';
 	import TrackTile from './board/TrackTile.svelte';
 	import StationTile from './board/StationTile.svelte';
 	import Vehicle from './board/Vehicle.svelte';
+	import WalkerSprite from './board/WalkerSprite.svelte';
 
 	// A fixed, zoomed-in window onto the world (in grid-tile units). Chosen to
 	// frame the little village's central loops and running trains. The SVG uses
@@ -61,7 +64,7 @@
 		key: string;
 		kind: 'loco' | 'wagon';
 		color: string;
-		occupied: boolean;
+		occupantColor: string | null;
 		x: number;
 		y: number;
 		heading: number;
@@ -72,7 +75,13 @@
 		for (const l of sim.locos) {
 			const lp = poseOf(l);
 			if (lp)
-				out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, occupied: false, ...lp });
+				out.push({
+					key: `loco-${l.id}`,
+					kind: 'loco',
+					color: l.color,
+					occupantColor: null,
+					...lp
+				});
 			for (let i = 0; i < l.wagons.length; i++) {
 				const wp = poseOf(l.wagons[i]);
 				if (wp)
@@ -80,7 +89,7 @@
 						key: `wagon-${l.id}-${i}`,
 						kind: 'wagon',
 						color: l.color,
-						occupied: i < l.passengers.length,
+						occupantColor: i < l.passengers.length ? personColor(l.passengers[i]) : null,
 						...wp
 					});
 			}
@@ -116,10 +125,14 @@
 		<Vehicle
 			kind={pose.kind}
 			color={pose.color}
-			occupied={pose.occupied}
+			occupantColor={pose.occupantColor}
 			x={pose.x}
 			y={pose.y}
 			heading={pose.heading}
 		/>
+	{/each}
+
+	{#each walkers.list as walker (walker.id)}
+		<WalkerSprite {walker} />
 	{/each}
 </svg>

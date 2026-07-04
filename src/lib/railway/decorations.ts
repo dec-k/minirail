@@ -1,6 +1,6 @@
 // 32-bit integer mixer producing a value in [0, 1). Deterministic per (x, y,
 // salt) so positions stay stable across renders, view switches, and reloads.
-function hash2(x: number, y: number, salt: number): number {
+export function hash2(x: number, y: number, salt: number): number {
 	let h =
 		(Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(salt, 1274126177)) | 0;
 	h = Math.imul(h ^ (h >>> 13), 1274126177);

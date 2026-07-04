@@ -15,7 +15,8 @@ import {
 import { pathsOf } from './pieces';
 import { pathLength, sample } from './geometry';
 import { getPiece, grid, toggleAt } from './grid.svelte';
-import { hasActiveParticles, spawnSteam, tickParticles } from './particles.svelte';
+import { hasActiveParticles, spawnSteam, spawnWalker, tickParticles } from './particles.svelte';
+import { personColor, platformAnchor } from './people';
 import { SvelteMap } from 'svelte/reactivity';
 import { markDirty } from './doc.svelte';
 
@@ -600,6 +601,33 @@ function maybeStartBoarding(l: Loco) {
 	l.boardingTimer = 0;
 }
 
+// World-space point on the track where the loco currently sits — the visual
+// "door" that boarding/dismounting walkers head to or set off from.
+function trainPoint(l: Loco): { x: number; y: number } | null {
+	const piece = getPiece(l.x, l.y);
+	if (!piece) return null;
+	const path = pathsOf(piece)[l.pathIdx];
+	if (!path) return null;
+	const s = sample(path, l.t);
+	return { x: l.x + s.x, y: l.y + s.y };
+}
+
+// Spawn a walker for one (de)boarding event. Walk duration matches
+// BOARDING_INTERVAL so each person finishes their walk just as the next
+// boarding tick fires. A small jitter on the platform end keeps successive
+// walkers from tracing the exact same line.
+function spawnBoardingWalker(l: Loco, stationKey: string, origin: string, toTrain: boolean) {
+	const tp = trainPoint(l);
+	if (!tp) return;
+	const [sx, sy] = stationKey.split(',').map(Number);
+	const { ax, ay } = platformAnchor(sx, sy);
+	const px = sx + ax + (Math.random() - 0.5) * 0.08;
+	const py = sy + ay + (Math.random() - 0.5) * 0.05;
+	const color = personColor(origin);
+	if (toTrain) spawnWalker(px, py, tp.x, tp.y, color, BOARDING_INTERVAL);
+	else spawnWalker(tp.x, tp.y, px, py, color, BOARDING_INTERVAL);
+}
+
 function releaseBoarding(l: Loco) {
 	l.lastBoardedAt = l.boardingAt;
 	l.boardingAt = null;
@@ -620,13 +648,15 @@ function tickBoarding(l: Loco, dt: number) {
 		// Phase 1: dismount one passenger whose origin is not this station.
 		const foreignIdx = l.passengers.findIndex((origin) => origin !== stationKey);
 		if (foreignIdx >= 0) {
-			l.passengers.splice(foreignIdx, 1);
+			const [origin] = l.passengers.splice(foreignIdx, 1);
+			spawnBoardingWalker(l, stationKey, origin, false);
 			continue;
 		}
 		// Phase 2: board a waiting person if there's wagon capacity.
 		if (station.peopleWaiting > 0 && l.passengers.length < l.wagons.length) {
 			station.peopleWaiting -= 1;
 			l.passengers.push(stationKey);
+			spawnBoardingWalker(l, stationKey, stationKey, true);
 			if (station.peopleWaiting === 0 || l.passengers.length >= l.wagons.length) {
 				releaseBoarding(l);
 				return;

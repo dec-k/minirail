@@ -25,7 +25,8 @@
 		Repeat,
 		Shuffle,
 		ChevronDown,
-		Container
+		Container,
+		Users
 	} from 'lucide-svelte';
 	import { slide } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
@@ -307,6 +308,19 @@
 							>
 								<Plus />
 							</Button>
+						</div>
+
+						<!-- Passengers aboard / capacity. Green while actively boarding. -->
+						<div
+							class="flex items-center gap-1.5 {openLoco.boardingAt !== null
+								? 'text-emerald-600 dark:text-emerald-400'
+								: 'text-muted-foreground'}"
+							title="Passengers aboard"
+						>
+							<Users class="size-4" aria-label="Passengers" />
+							<span class="text-sm tabular-nums">
+								{openLoco.passengers.length}/{openLoco.wagons.length}
+							</span>
 						</div>
 
 						<div class="ml-auto flex items-center gap-1">

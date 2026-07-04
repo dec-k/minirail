@@ -4,14 +4,16 @@
 	let {
 		kind,
 		color,
-		occupied,
+		occupantColor = null,
 		x,
 		y,
 		heading
 	}: {
 		kind: 'loco' | 'wagon';
 		color: string;
-		occupied: boolean;
+		// Origin-station colour of the passenger riding this wagon, or null when
+		// empty. Locos never carry passengers.
+		occupantColor?: string | null;
 		x: number;
 		y: number;
 		heading: number;
@@ -119,15 +121,18 @@
 			stroke={dark}
 			stroke-width="1.5"
 		/>
-		{#if occupied}
+		{#if occupantColor}
+			<!-- Passenger seen from above: shoulders in origin-station colour with
+			     the head centred on top, so it stays readable at any heading. -->
 			<circle
 				cx="0"
 				cy="0"
-				r={TILE * 0.06}
-				fill="#fbe49d"
-				stroke="#7a5535"
+				r={TILE * 0.065}
+				fill={occupantColor}
+				stroke="rgba(0,0,0,0.35)"
 				stroke-width="0.7"
 			/>
+			<circle cx="0" cy="0" r={TILE * 0.035} fill="#fbe49d" stroke="#7a5535" stroke-width="0.6" />
 		{/if}
 	{/if}
 </g>

@@ -23,13 +23,15 @@
 		type Dir,
 		type PieceKind
 	} from '$lib/railway/types';
+	import { walkers } from '$lib/railway/particles.svelte';
+	import { personColor } from '$lib/railway/people';
 	import { TILE } from './board/constants';
 	import GroundOverTile from './board/GroundOverTile.svelte';
 	import DecorationTile from './board/DecorationTile.svelte';
 	import TrackTile from './board/TrackTile.svelte';
 	import StationTile from './board/StationTile.svelte';
 	import Vehicle from './board/Vehicle.svelte';
-	import LocoBadge from './board/LocoBadge.svelte';
+	import WalkerSprite from './board/WalkerSprite.svelte';
 	import ParticleLayer from './board/ParticleLayer.svelte';
 
 	type Tool = PieceKind | 'loco' | 'erase' | 'draw' | 'station' | 'decorate' | 'pan';
@@ -50,7 +52,7 @@
 		key: string;
 		kind: 'loco' | 'wagon';
 		color: string;
-		occupied: boolean;
+		occupantColor: string | null;
 		x: number;
 		y: number;
 		heading: number;
@@ -74,7 +76,13 @@
 		for (const l of sim.locos) {
 			const lp = poseOf(l);
 			if (lp)
-				out.push({ key: `loco-${l.id}`, kind: 'loco', color: l.color, occupied: false, ...lp });
+				out.push({
+					key: `loco-${l.id}`,
+					kind: 'loco',
+					color: l.color,
+					occupantColor: null,
+					...lp
+				});
 			for (let i = 0; i < l.wagons.length; i++) {
 				const wp = poseOf(l.wagons[i]);
 				if (wp)
@@ -82,36 +90,10 @@
 						key: `wagon-${l.id}-${i}`,
 						kind: 'wagon',
 						color: l.color,
-						occupied: i < l.passengers.length,
+						occupantColor: i < l.passengers.length ? personColor(l.passengers[i]) : null,
 						...wp
 					});
 			}
-		}
-		return out;
-	});
-
-	type LocoBadgeData = {
-		key: string;
-		x: number;
-		y: number;
-		passengers: number;
-		capacity: number;
-		boarding: boolean;
-	};
-
-	const locoBadges = $derived.by(() => {
-		const out: LocoBadgeData[] = [];
-		for (const l of sim.locos) {
-			const lp = poseOf(l);
-			if (!lp) continue;
-			out.push({
-				key: `badge-${l.id}`,
-				x: lp.x,
-				y: lp.y,
-				passengers: l.passengers.length,
-				capacity: l.wagons.length,
-				boarding: l.boardingAt !== null
-			});
 		}
 		return out;
 	});
@@ -379,14 +361,13 @@
 			return { x, y, groundOver };
 		})
 	);
-
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	class="absolute inset-0 overflow-hidden bg-background touch-pinch-zoom"
+	class="absolute inset-0 touch-pinch-zoom overflow-hidden bg-background"
 	class:cursor-grab={tool === 'pan' && pan === null}
 	class:cursor-grabbing={pan !== null}
 	onwheel={handleWheel}
@@ -397,82 +378,68 @@
 	onauxclick={(e) => e.preventDefault()}
 	oncontextmenu={(e) => e.preventDefault()}
 >
-<div
-	class="absolute top-0 left-0 origin-top-left overflow-hidden rounded-lg bg-board-bg shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
-	style="transform: translate({panX}px, {panY}px) scale({zoom})"
->
-	<svg
-		viewBox="0 0 {widthPx} {heightPx}"
-		width={widthPx}
-		height={heightPx}
-		class="block select-none"
-		class:cursor-crosshair={tool === 'draw'}
-		onclick={handleClick}
-		onpointerdown={handlePointerDown}
-		onpointermove={handlePointerMove}
-		onpointerup={handlePointerUp}
-		onpointercancel={handlePointerUp}
-		role="img"
-		aria-label="Track grid"
+	<div
+		class="absolute top-0 left-0 origin-top-left overflow-hidden rounded-lg bg-board-bg shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
+		style="transform: translate({panX}px, {panY}px) scale({zoom})"
 	>
-		<defs>
-			<pattern id="gridPattern" width={TILE} height={TILE} patternUnits="userSpaceOnUse">
-				<path
-					d={`M ${TILE} 0 L 0 0 0 ${TILE}`}
-					fill="none"
-					class="stroke-board-grid"
-					stroke-width="1"
+		<svg
+			viewBox="0 0 {widthPx} {heightPx}"
+			width={widthPx}
+			height={heightPx}
+			class="block select-none"
+			class:cursor-crosshair={tool === 'draw'}
+			onclick={handleClick}
+			onpointerdown={handlePointerDown}
+			onpointermove={handlePointerMove}
+			onpointerup={handlePointerUp}
+			onpointercancel={handlePointerUp}
+			role="img"
+			aria-label="Track grid"
+		>
+			<defs>
+				<pattern id="gridPattern" width={TILE} height={TILE} patternUnits="userSpaceOnUse">
+					<path
+						d={`M ${TILE} 0 L 0 0 0 ${TILE}`}
+						fill="none"
+						class="stroke-board-grid"
+						stroke-width="1"
+					/>
+				</pattern>
+			</defs>
+
+			<rect width={widthPx} height={heightPx} fill="url(#gridPattern)" />
+
+			{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
+				<GroundOverTile {x} {y} kind={groundOver.kind} />
+			{/each}
+
+			{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
+				<DecorationTile {x} {y} kind={decoration.kind} />
+			{/each}
+
+			{#each cellEntries as { x, y, piece } (`${x},${y}`)}
+				<TrackTile {x} {y} {piece} />
+			{/each}
+
+			{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
+				<StationTile {x} {y} {station} />
+			{/each}
+
+			{#each vehiclePoses as pose (pose.key)}
+				<Vehicle
+					kind={pose.kind}
+					color={pose.color}
+					occupantColor={pose.occupantColor}
+					x={pose.x}
+					y={pose.y}
+					heading={pose.heading}
 				/>
-			</pattern>
-		</defs>
+			{/each}
 
-		<rect width={widthPx} height={heightPx} fill="url(#gridPattern)" />
-
-		{#each groundOverEntries as { x, y, groundOver } (`ground-${x},${y}`)}
-			<GroundOverTile {x} {y} kind={groundOver.kind} />
-		{/each}
-
-		{#each decorationEntries as { x, y, decoration } (`deco-${x},${y}`)}
-			<DecorationTile {x} {y} kind={decoration.kind} />
-		{/each}
-
-		{#each cellEntries as { x, y, piece } (`${x},${y}`)}
-			<TrackTile {x} {y} {piece} />
-		{/each}
-
-		{#each stationEntries as { x, y, station } (`station-${x},${y}`)}
-			<StationTile {x} {y} {station} />
-		{/each}
-
-		{#each vehiclePoses as pose (pose.key)}
-			<Vehicle
-				kind={pose.kind}
-				color={pose.color}
-				occupied={pose.occupied}
-				x={pose.x}
-				y={pose.y}
-				heading={pose.heading}
-			/>
-		{/each}
-
-	</svg>
-	<ParticleLayer {widthPx} {heightPx} />
-	<svg
-		viewBox="0 0 {widthPx} {heightPx}"
-		width={widthPx}
-		height={heightPx}
-		class="pointer-events-none absolute top-0 left-0 block select-none"
-		role="presentation"
-	>
-		{#each locoBadges as b (b.key)}
-			<LocoBadge
-				x={b.x}
-				y={b.y}
-				passengers={b.passengers}
-				capacity={b.capacity}
-				boarding={b.boarding}
-			/>
-		{/each}
-	</svg>
-</div>
+			{#each walkers.list as walker (walker.id)}
+				<WalkerSprite {walker} />
+			{/each}
+		</svg>
+		<ParticleLayer {widthPx} {heightPx} />
+	</div>
 </div>
